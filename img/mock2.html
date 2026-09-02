@@ -1,0 +1,1143 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>P.N.E. - Pocket Narrative Engine</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+JP:wght@400;500;700;900&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0412;
+      --bg-surface: #140b20;
+      --bg-card: rgba(26, 14, 40, 0.75);
+      --accent-pink: #e02479;
+      --accent-purple: #7b2cbf;
+      --badge-ready: #2dd4bf;
+      --badge-name: #fbbf24;
+      --text-main: #ffffff;
+      --text-sub: rgba(255, 255, 255, 0.7);
+      --border: rgba(255, 255, 255, 0.12);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+body {
+  font-family: 'Noto Sans JP', sans-serif;
+  background-color: #0a0412;
+  background-image: url('bg2.png');
+  background-size: cover;
+  background-position: center top;
+  background-attachment: fixed;
+  background-repeat: no-repeat;
+  color: var(--text-main);
+  overflow-x: hidden;
+  line-height: 1.6;
+}
+
+/* 背景を最背面ではなく通常レイヤーの背後に敷く */
+.bg-fixed {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-image: url('bg2.png');
+  background-size: cover;
+  background-position: center top;
+  background-repeat: no-repeat;
+  z-index: -1;
+  pointer-events: none;
+}
+
+    /* ヘッダー */
+    header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1.25rem 2rem;
+      max-width: 1400px;
+      margin: 0 auto;
+      width: 100%;
+    }
+
+    .logo img {
+      height: 160px;
+      object-fit: contain;
+      filter: drop-shadow(0 0 10px rgba(186, 104, 200, 0.6));
+    }
+
+    .nav-actions {
+      display: flex;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    .btn-submit {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.2);
+      color: #fff;
+      padding: 0.45rem 1rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-submit:hover {
+      background: rgba(255, 255, 255, 0.18);
+    }
+ 
+    .btn-auth {
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      color: #fff;
+      padding: 0.45rem 1.2rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-decoration: none;
+      box-shadow: 0 0 12px rgba(224, 36, 121, 0.4);
+    }
+
+    /* ヒーローセクション */
+    .hero-section {
+      display: grid;
+      grid-template-columns: 1.1fr 1.5fr;
+      align-items: center;
+      max-width: 1400px;
+      margin: 2rem auto 3rem;
+      padding: 0 2rem;
+      gap: 2rem;
+    }
+
+    .hero-title {
+      font-size: 2.8rem;
+      font-weight: 900;
+      line-height: 1.3;
+      text-shadow: 0 0 25px rgba(224, 36, 121, 0.6);
+    }
+
+    .hero-sub {
+      font-size: 1.05rem;
+      color: var(--text-sub);
+      margin: 1.2rem 0 1.8rem;
+    }
+
+    .cta-btn {
+      display: inline-flex;
+      align-items: center;
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      color: white;
+      text-decoration: none;
+      font-weight: 700;
+      padding: 0.85rem 1.8rem;
+      border-radius: 999px;
+      box-shadow: 0 0 20px rgba(224, 36, 121, 0.4);
+      transition: transform 0.2s;
+    }
+
+    .cta-btn:hover {
+      transform: translateY(-2px);
+    }
+
+    /* カルーセル */
+    .carousel-wrapper {
+      overflow: hidden;
+      mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+      -webkit-mask-image: linear-gradient(to right, transparent, black 8%, black 92%, transparent);
+    }
+
+    .carousel-track {
+      display: flex;
+      gap: 1.25rem;
+      width: max-content;
+      animation: infiniteScroll 26s linear infinite;
+    }
+
+    .carousel-wrapper:hover .carousel-track {
+      animation-play-state: paused;
+    }
+
+    @keyframes infiniteScroll {
+      0% { transform: translateX(0); }
+      100% { transform: translateX(calc(-50% - 0.625rem)); }
+    }
+
+    /* 下部：作品一覧ポータルエリア */
+    .portal-container {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 1.2rem;
+      margin-bottom: 2rem;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+
+    .section-title {
+      font-size: 1.6rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 0.6rem;
+    }
+
+    .section-title::before {
+      content: '';
+      display: inline-block;
+      width: 4px;
+      height: 1.4rem;
+      background: var(--accent-pink);
+      border-radius: 2px;
+    }
+
+    /* フィルタータブ */
+    .filter-group {
+      display: flex;
+      gap: 0.6rem;
+      flex-wrap: wrap;
+    }
+
+    .filter-chip {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border);
+      color: var(--text-sub);
+      padding: 0.4rem 1rem;
+      border-radius: 999px;
+      font-size: 0.85rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .filter-chip.active, .filter-chip:hover {
+      background: rgba(224, 36, 121, 0.25);
+      border-color: var(--accent-pink);
+      color: #fff;
+    }
+
+    /* 作品グリッド */
+    .card-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+      gap: 1.75rem;
+      margin-bottom: 4rem;
+    }
+
+    /* 共通カードスタイル */
+    .card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      backdrop-filter: blur(10px);
+      display: flex;
+      flex-direction: column;
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      cursor: pointer;
+      text-decoration: none;
+      color: inherit;
+      width: 260px;
+    }
+
+    .card:hover {
+      transform: translateY(-4px);
+      border-color: rgba(224, 36, 121, 0.6);
+      box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    .card-img-wrap {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      background: #111;
+    }
+
+    .card-img-wrap img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .badge-stamp {
+      position: absolute;
+      top: 0.6rem;
+      right: 0.6rem;
+      padding: 0.25rem 0.65rem;
+      border-radius: 999px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      backdrop-filter: blur(6px);
+      border: 1px solid;
+    }
+
+    .badge-stamp.ready {
+      background: rgba(45, 212, 191, 0.2);
+      border-color: var(--badge-ready);
+      color: var(--badge-ready);
+    }
+
+    .badge-stamp.name {
+      background: rgba(251, 191, 36, 0.2);
+      border-color: var(--badge-name);
+      color: var(--badge-name);
+    }
+
+    .card-body {
+      padding: 1rem;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+      flex: 1;
+    }
+
+    .card-title {
+      font-size: 1.1rem;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .card-intro {
+      font-size: 0.8rem;
+      color: var(--text-sub);
+      line-height: 1.5;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-footer {
+      margin-top: auto;
+      padding-top: 0.6rem;
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.75rem;
+      color: rgba(255, 255, 255, 0.45);
+    }
+
+    .card-dl-note {
+      font-size: 0.75rem;
+      color: var(--badge-name);
+      font-weight: 700;
+      margin-top: -0.2rem;
+    }
+
+    /* ポータル下部：P.N.E.の体験説明 */
+    .landing-section {
+      max-width: 1400px;
+      margin: 0 auto;
+      padding: 6rem 2rem;
+    }
+
+    .landing-section + .landing-section {
+      border-top: 1px solid var(--border);
+    }
+
+    .eyebrow {
+      display: inline-block;
+      color: #f0a1c8;
+      font-size: 0.78rem;
+      font-weight: 900;
+      letter-spacing: 0.16em;
+      text-transform: uppercase;
+      margin-bottom: 0.8rem;
+    }
+
+    .landing-title {
+      font-size: clamp(1.9rem, 4vw, 3.4rem);
+      line-height: 1.3;
+      margin-bottom: 1rem;
+      text-wrap: balance;
+    }
+
+    .landing-lead {
+      color: var(--text-sub);
+      max-width: 650px;
+      font-size: 1rem;
+    }
+
+    .experience-grid {
+      display: grid;
+      grid-template-columns: minmax(0, 1.2fr) minmax(340px, 0.8fr);
+      gap: 4rem;
+      align-items: center;
+    }
+
+    .experience-demo {
+      position: relative;
+      min-height: 420px;
+      border: 1px solid rgba(224, 36, 121, 0.35);
+      border-radius: 24px;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 70% 20%, rgba(224, 36, 121, 0.22), transparent 35%),
+        linear-gradient(145deg, rgba(30, 12, 42, 0.95), rgba(7, 3, 14, 0.97));
+      box-shadow: 0 24px 70px rgba(0, 0, 0, 0.36);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 2rem;
+    }
+
+    .experience-demo::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background-image: url('bg2.PNG');
+      background-size: cover;
+      opacity: 0.18;
+    }
+
+    .demo-inner {
+      position: relative;
+      width: min(100%, 520px);
+      text-align: center;
+    }
+
+    .demo-label {
+      color: rgba(255,255,255,0.55);
+      font-size: 0.75rem;
+      letter-spacing: 0.12em;
+      margin-bottom: 1.4rem;
+    }
+
+    .demo-dialogue {
+      font-size: clamp(1.25rem, 3vw, 1.8rem);
+      font-weight: 700;
+      line-height: 1.7;
+      min-height: 6rem;
+    }
+
+    .demo-wave {
+      height: 50px;
+      margin: 1.8rem 0;
+      background: url('bg2.PNG') center 55% / 200% auto no-repeat;
+      filter: brightness(1.8) saturate(1.3);
+      opacity: 0.75;
+      mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+    }
+
+    .demo-response {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.55rem;
+      padding: 0.55rem 1rem;
+      border: 1px solid rgba(45, 212, 191, 0.5);
+      color: var(--badge-ready);
+      background: rgba(45, 212, 191, 0.08);
+      border-radius: 999px;
+      font-size: 0.8rem;
+    }
+
+    .play-demo {
+      position: absolute;
+      right: 1.2rem;
+      bottom: 1.2rem;
+      width: 48px;
+      height: 48px;
+      border-radius: 50%;
+      border: 1px solid rgba(255,255,255,0.3);
+      background: rgba(255,255,255,0.1);
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      backdrop-filter: blur(8px);
+    }
+
+    .step-list {
+      display: grid;
+      margin: 2.2rem 0 2rem;
+    }
+
+    .step-item {
+      display: grid;
+      grid-template-columns: 46px 1fr;
+      gap: 1rem;
+      padding: 1.25rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .step-number {
+      width: 38px;
+      height: 38px;
+      border-radius: 50%;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      font-weight: 900;
+      box-shadow: 0 0 18px rgba(224, 36, 121, 0.3);
+    }
+
+    .step-item h3 { font-size: 1rem; margin-bottom: 0.25rem; }
+    .step-item p { color: var(--text-sub); font-size: 0.85rem; }
+
+    /* 名前呼び・PCアプリ */
+    .name-section {
+      max-width: none;
+      padding-left: max(2rem, calc((100vw - 1400px) / 2 + 2rem));
+      padding-right: max(2rem, calc((100vw - 1400px) / 2 + 2rem));
+      background: linear-gradient(90deg, rgba(224, 36, 121, 0.08), rgba(123, 44, 191, 0.04));
+    }
+
+    .name-grid {
+      display: grid;
+      grid-template-columns: minmax(320px, 0.85fr) minmax(0, 1.15fr);
+      gap: 4rem;
+      align-items: center;
+    }
+
+    .name-visual {
+      position: relative;
+      min-height: 500px;
+      border-radius: 28px;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.14);
+      background: #1d0c29;
+    }
+
+    .name-visual img {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      object-position: 58% center;
+    }
+
+    .name-visual::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(to top, rgba(10,4,18,0.95), transparent 58%);
+    }
+
+    .name-quote {
+      position: absolute;
+      z-index: 1;
+      left: 1.5rem;
+      right: 1.5rem;
+      bottom: 1.5rem;
+      font-size: 1.25rem;
+      font-weight: 700;
+      text-shadow: 0 2px 15px #000;
+    }
+
+    .name-flow {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 0.75rem;
+      margin: 2rem 0;
+    }
+
+    .flow-card {
+      padding: 1rem;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,0.04);
+      border-radius: 12px;
+      font-size: 0.82rem;
+      color: var(--text-sub);
+    }
+
+    .flow-card strong {
+      display: block;
+      color: #fff;
+      margin-bottom: 0.25rem;
+    }
+
+    .privacy-note {
+      color: rgba(255,255,255,0.52);
+      font-size: 0.78rem;
+      margin-top: 1rem;
+    }
+
+    /* クリエイター向け */
+    .creator-panel {
+      position: relative;
+      overflow: hidden;
+      border: 1px solid rgba(255,255,255,0.14);
+      border-radius: 24px;
+      padding: clamp(2rem, 5vw, 4.5rem);
+      background: linear-gradient(135deg, rgba(31, 15, 47, 0.96), rgba(14, 7, 24, 0.96));
+    }
+
+    .creator-panel::after {
+      content: 'P.N.E.';
+      position: absolute;
+      right: -1rem;
+      bottom: -3.5rem;
+      color: rgba(255,255,255,0.025);
+      font-size: clamp(7rem, 18vw, 15rem);
+      font-weight: 900;
+      line-height: 1;
+      pointer-events: none;
+    }
+
+    .creator-content { position: relative; z-index: 1; max-width: 920px; }
+
+    .creator-features {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 1rem;
+      margin: 2.2rem 0;
+    }
+
+    .creator-feature {
+      min-height: 125px;
+      padding: 1.15rem;
+      border-left: 2px solid var(--accent-pink);
+      background: rgba(255,255,255,0.035);
+    }
+
+    .creator-feature strong { display: block; margin-bottom: 0.5rem; }
+    .creator-feature span { color: var(--text-sub); font-size: 0.8rem; }
+
+    .secondary-link {
+      display: inline-block;
+      color: var(--text-sub);
+      margin-left: 1.2rem;
+      font-size: 0.88rem;
+      text-decoration: none;
+      border-bottom: 1px solid rgba(255,255,255,0.3);
+    }
+
+    /* モーダル（作品詳細） */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.8);
+      backdrop-filter: blur(8px);
+      z-index: 100;
+      display: none;
+      justify-content: center;
+      align-items: center;
+      padding: 1.5rem;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-content {
+      background: var(--bg-surface);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      max-width: 800px;
+      width: 100%;
+      max-height: 90vh;
+      overflow-y: auto;
+      padding: 2rem;
+      position: relative;
+    }
+
+    .modal-close {
+      position: absolute;
+      top: 1rem;
+      right: 1.2rem;
+      font-size: 1.8rem;
+      background: none;
+      border: none;
+      color: var(--text-sub);
+      cursor: pointer;
+    }
+
+    .modal-grid {
+      display: grid;
+      grid-template-columns: 200px 1fr;
+      gap: 1.75rem;
+      margin-bottom: 2rem;
+    }
+
+    .modal-cover {
+      width: 100%;
+      aspect-ratio: 3 / 4;
+      border-radius: 8px;
+      object-fit: cover;
+    }
+
+    .modal-cta-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin-top: 1.5rem;
+    }
+
+    .btn-play {
+      background: linear-gradient(135deg, var(--accent-pink), var(--accent-purple));
+      color: #fff;
+      border: none;
+      padding: 0.85rem;
+      border-radius: 8px;
+      font-size: 1.05rem;
+      font-weight: 700;
+      cursor: pointer;
+      text-align: center;
+    }
+
+    .tauri-box {
+      background: rgba(251, 191, 36, 0.1);
+      border: 1px solid rgba(251, 191, 36, 0.3);
+      padding: 0.9rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .tauri-box a {
+      color: var(--badge-name);
+      font-weight: 700;
+    }
+
+    /* コメント欄 */
+    .comments-area {
+      border-top: 1px solid var(--border);
+      padding-top: 1.5rem;
+    }
+
+    .comment-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin: 1rem 0;
+    }
+
+    .comment-item {
+      background: rgba(255, 255, 255, 0.03);
+      padding: 0.75rem 1rem;
+      border-radius: 8px;
+      font-size: 0.85rem;
+    }
+
+    .comment-header {
+      display: flex;
+      justify-content: space-between;
+      color: var(--text-sub);
+      font-size: 0.75rem;
+      margin-bottom: 0.25rem;
+    }
+
+    /* フッター */
+    footer {
+      border-top: 1px solid var(--border);
+      padding: 2.5rem 2rem;
+      text-align: center;
+      font-size: 0.8rem;
+      color: rgba(255, 255, 255, 0.4);
+      background: rgba(5, 2, 8, 0.9);
+    }
+
+    @media (max-width: 850px) {
+      .hero-section {
+        grid-template-columns: 1fr;
+      }
+      .modal-grid {
+        grid-template-columns: 1fr;
+      }
+      .experience-grid,
+      .name-grid {
+        grid-template-columns: 1fr;
+        gap: 2.5rem;
+      }
+      .name-visual { min-height: 420px; }
+      .creator-features { grid-template-columns: repeat(2, 1fr); }
+    }
+
+    @media (max-width: 560px) {
+      header { padding: 0.75rem 1rem; }
+      .logo img { height: 95px; }
+      .btn-submit { display: none; }
+      .hero-section { padding: 0 1rem; margin-top: 0; }
+      .hero-title { font-size: 2.25rem; }
+      .portal-container, .landing-section { padding-left: 1rem; padding-right: 1rem; }
+      .landing-section { padding-top: 4rem; padding-bottom: 4rem; }
+      .experience-demo { min-height: 340px; padding: 1.25rem; }
+      .name-section { padding-left: 1rem; padding-right: 1rem; }
+      .name-flow { grid-template-columns: 1fr; }
+      .creator-features { grid-template-columns: 1fr; }
+      .secondary-link { display: block; width: max-content; margin: 1rem 0 0; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-fixed"></div>
+
+  <!-- ナビゲーション -->
+  <header>
+    <div class="logo">
+      <img src="logo.PNG" alt="P.N.E. Logo">
+    </div>
+    <div class="nav-actions">
+      <a href="#" class="btn-submit">＋ 作品を申請する</a>
+      <a href="#" class="btn-auth">ログイン</a>
+    </div>
+  </header>
+
+  <!-- ファーストビュー・ヒーロー -->
+  <section class="hero-section">
+    <div class="hero-copy">
+      <h1 class="hero-title">
+        耳だけで、<br>
+        物語の中に入る
+      </h1>
+      <p class="hero-sub">
+        画面を見ない、音声インタラクティブポータル。<br>
+        アカウントなしですぐに聴き始められます。
+      </p>
+      <a href="#browse" class="cta-btn">▶ すぐ聴ける作品を探す</a>
+    </div>
+
+    <!-- カルーセル -->
+    <div class="carousel-wrapper">
+      <div class="carousel-track">
+        <div class="card" onclick="openDetail(0)">
+          <div class="card-img-wrap">
+            <img src="chara_01.PNG" alt="魅惑の関西お兄さん">
+            <span class="badge-stamp ready">◎ すぐ聴ける</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">魅惑の関西お兄さん</div>
+            <div class="card-intro">重い境界線で甘く囁かれる、ちょっと危険な大人の物語。</div>
+            <div class="card-footer">
+              <span>#囁き #男性</span>
+              <span>⏱ 15分</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" onclick="openDetail(1)">
+          <div class="card-img-wrap">
+            <img src="chara_02.PNG" alt="雨宿りの部屋">
+            <span class="badge-stamp name">◎ 名前で呼ばれる</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">雨宿りの部屋</div>
+            <div class="card-intro">雨音に包まれて、あなただけを見つめる。静かで、狂おしい時間。</div>
+            <div class="card-dl-note">PCアプリDL →</div>
+            <div class="card-footer">
+              <span>#密室 #青年</span>
+              <span>⏱ 20分</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="card" onclick="openDetail(2)">
+          <div class="card-img-wrap">
+            <img src="chara_03.PNG" alt="森の囁き">
+            <span class="badge-stamp ready">◎ すぐ聴ける</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">森の囁き</div>
+            <div class="card-intro">森の奥で出会ったのは、静寂に佇む謎の人物。</div>
+            <div class="card-footer">
+              <span>#癒し #幻想</span>
+              <span>⏱ 10分</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- ループ用クローン -->
+        <div class="card" onclick="openDetail(0)">
+          <div class="card-img-wrap">
+            <img src="chara_01.PNG" alt="魅惑の関西お兄さん">
+            <span class="badge-stamp ready">◎ すぐ聴ける</span>
+          </div>
+          <div class="card-body">
+            <div class="card-title">魅惑の関西お兄さん</div>
+            <div class="card-intro">重い境界線で甘く囁かれる、ちょっと危険な大人の物語。</div>
+            <div class="card-footer">
+              <span>#囁き #男性</span>
+              <span>⏱ 15分</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 作品一覧エリア -->
+  <main class="portal-container" id="browse">
+    <div class="section-header">
+      <h2 class="section-title">新着作品</h2>
+      <div class="filter-group">
+        <button class="filter-chip active" onclick="filterCards('all')">すべて</button>
+        <button class="filter-chip" onclick="filterCards('ready')">◎ すぐ聴ける</button>
+        <button class="filter-chip" onclick="filterCards('name')">◎ 名前で呼ばれる</button>
+      </div>
+    </div>
+
+    <!-- グリッド一覧 -->
+    <div class="card-grid" id="cardGrid">
+      <!-- Card 0 -->
+      <div class="card" data-type="ready" onclick="openDetail(0)">
+        <div class="card-img-wrap">
+          <img src="chara_01.PNG" alt="魅惑の関西お兄さん">
+          <span class="badge-stamp ready">◎ すぐ聴ける</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">魅惑の関西お兄さん</div>
+          <div class="card-intro">重い境界線で甘く囁かれる、ちょっと危険な大人の物語。</div>
+          <div class="card-footer">
+            <span>#囁き #男性</span>
+            <span>⏱ 15分</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 1 -->
+      <div class="card" data-type="name" onclick="openDetail(1)">
+        <div class="card-img-wrap">
+          <img src="chara_02.PNG" alt="雨宿りの部屋">
+          <span class="badge-stamp name">◎ 名前で呼ばれる</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">雨宿りの部屋</div>
+          <div class="card-intro">雨音に包まれて、あなただけを見つめる。静かで、狂おしい時間。</div>
+          <div class="card-dl-note">PCアプリDL →</div>
+          <div class="card-footer">
+            <span>#密室 #青年</span>
+            <span>⏱ 20分</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Card 2 -->
+      <div class="card" data-type="ready" onclick="openDetail(2)">
+        <div class="card-img-wrap">
+          <img src="chara_03.PNG" alt="森の囁き">
+          <span class="badge-stamp ready">◎ すぐ聴ける</span>
+        </div>
+        <div class="card-body">
+          <div class="card-title">森の囁き</div>
+          <div class="card-intro">森の奥で出会ったのは、静寂に佇む謎の人物。</div>
+          <div class="card-footer">
+            <span>#癒し #幻想</span>
+            <span>⏱ 10分</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- P.N.E.の体験説明 -->
+  <section class="landing-section" id="about">
+    <div class="experience-grid">
+      <div class="experience-demo" aria-label="P.N.E.体験動画のモック">
+        <div class="demo-inner">
+          <div class="demo-label">INTERACTIVE AUDIO EXPERIENCE</div>
+          <div class="demo-dialogue">「まだ起きてる？」<br>……寝たふりしても分かるよ。</div>
+          <div class="demo-wave"></div>
+          <div class="demo-response">● 沈黙を検知して、物語が変化</div>
+        </div>
+        <button class="play-demo" type="button" aria-label="体験動画を再生">▶</button>
+      </div>
+
+      <div>
+        <span class="eyebrow">What is P.N.E.?</span>
+        <h2 class="landing-title">画面を閉じても、<br>物語は続く。</h2>
+        <p class="landing-lead">P.N.E.は、画面を見ずに遊べる音声インタラクティブ作品です。キャラクターの問いかけに声や沈黙で応えると、その反応によって次の声が変わります。</p>
+
+        <div class="step-list">
+          <div class="step-item">
+            <div class="step-number">1</div>
+            <div><h3>イヤホンをつける</h3><p>作品を選んだら、あとは耳だけで物語の中へ。</p></div>
+          </div>
+          <div class="step-item">
+            <div class="step-number">2</div>
+            <div><h3>声・沈黙・ボタンで応える</h3><p>複雑な操作は不要。あなたの自然な反応が入力になります。</p></div>
+          </div>
+          <div class="step-item">
+            <div class="step-number">3</div>
+            <div><h3>次の声が変わる</h3><p>選ばれた反応によって、会話と関係性が少しずつ変化します。</p></div>
+          </div>
+        </div>
+
+        <a href="#browse" class="cta-btn">▶ 無料作品で体験する</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 名前呼び・PCアプリ導線 -->
+  <section class="landing-section name-section" id="desktop-app">
+    <div class="name-grid">
+      <div class="name-visual">
+        <img src="girl.PNG" alt="イヤホンでP.N.E.作品を楽しむリスナー">
+        <div class="name-quote">「ねえ、——。こっちを見て」</div>
+      </div>
+
+      <div>
+        <span class="eyebrow">Personalized Voice</span>
+        <h2 class="landing-title">その人が、<br>あなたの名前を呼ぶ。</h2>
+        <p class="landing-lead">名前が入ることで、これは「誰かの物語」ではなくなります。PCプレイヤーなら、対応作品の名前音声を端末内で生成し、あなただけの状態で再生できます。</p>
+
+        <div class="name-flow">
+          <div class="flow-card"><strong>01 名前を入力</strong>呼ばれたい名前と読み方を設定</div>
+          <div class="flow-card"><strong>02 端末内で生成</strong>音声は外部へ送信せずPC内で処理</div>
+          <div class="flow-card"><strong>03 好きな場所で聴く</strong>PCで再生、またはスマホへ転送</div>
+        </div>
+
+        <a href="#" class="cta-btn">PCプレイヤーについて見る</a>
+        <p class="privacy-note">🔒 入力した名前と生成音声はサーバーへ送信されません。</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- クリエイター向け -->
+  <section class="landing-section" id="creators">
+    <div class="creator-panel">
+      <div class="creator-content">
+        <span class="eyebrow">For Creators</span>
+        <h2 class="landing-title">あなたの物語を、<br>「聴かれる体験」に。</h2>
+        <p class="landing-lead">音声作品に分岐とリアクションを加えて、画面を見ないインタラクティブ作品として公開できます。</p>
+
+        <div class="creator-features">
+          <div class="creator-feature"><strong>音声＋分岐</strong><span>収録音声とシナリオデータから作品を構成</span></div>
+          <div class="creator-feature"><strong>公開申請</strong><span>完成した作品をP.N.E.ポータルへ申請</span></div>
+          <div class="creator-feature"><strong>名前呼び対応</strong><span>対応作品として、より深い没入体験を提供</span></div>
+          <div class="creator-feature"><strong>作者・声優紹介</strong><span>作品ページからプロフィールへつながる</span></div>
+        </div>
+
+        <a href="#" class="cta-btn">制作・投稿について見る</a>
+        <a href="#" class="secondary-link">作品を申請する →</a>
+      </div>
+    </div>
+  </section>
+
+  <!-- 作品詳細モーダル（要件定義書 7.2 / 7.3準拠） -->
+  <div class="modal-overlay" id="detailModal" onclick="closeModal(event)">
+    <div class="modal-content" onclick="event.stopPropagation()">
+      <button class="modal-close" onclick="closeModal()">×</button>
+      <div class="modal-grid">
+        <img id="mCover" src="" alt="Cover" class="modal-cover">
+        <div>
+          <span id="mBadge" class="badge-stamp"></span>
+          <h2 id="mTitle" style="font-size: 1.4rem; margin: 0.5rem 0;"></h2>
+          <div style="font-size: 0.85rem; color: var(--text-sub); margin-bottom: 0.75rem;">
+            作者: <span id="mAuthor" style="color:#fff;"></span> · 声: <span id="mCV" style="color:#fff;"></span>
+          </div>
+          <p id="mSynopsis" style="font-size: 0.9rem; line-height: 1.7; color: var(--text-sub);"></p>
+          
+          <div class="modal-cta-group">
+            <button class="btn-play">▶ ブラウザで今すぐ聴く（無料）</button>
+            <div id="mTauriNotice" class="tauri-box" style="display: none;">
+              💡 <strong>自分の名前で呼ばれたい場合:</strong><br>
+              <a href="#">Tauri PCプレイヤー（無料）</a> をダウンロードし、ローカルで音声を生成して再生またはQR転送できます。
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- コメント欄 -->
+      <div class="comments-area">
+        <h3 style="font-size: 1.05rem; margin-bottom: 0.75rem;">リスナーの感想 (2)</h3>
+        <div class="comment-list">
+          <div class="comment-item">
+            <div class="comment-header">
+              <span>リスナーA</span>
+              <span>2026/08/20</span>
+            </div>
+            <div>声の距離感が近くてヘッドホン推奨です。息遣いがリアルで鳥肌立ちました！</div>
+          </div>
+          <div class="comment-item">
+            <div class="comment-header">
+              <span>リスナーB</span>
+              <span>2026/08/21</span>
+            </div>
+            <div>名前で呼ばれる没入感がすごいです…！選択肢の緊張感も良かったです。</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- フッター -->
+  <footer>
+    <p>&copy; 2026 P.N.E. (Pocket Narrative Engine) - All Rights Reserved.</p>
+  </footer>
+
+  <script>
+    // 作品データ（MVP要件モック）
+    const works = [
+      {
+        title: "魅惑の関西お兄さん",
+        type: "ready",
+        typeName: "◎ すぐ聴ける",
+        cover: "chara_01.PNG",
+        author: "PNE Studio",
+        cv: "橘 音也",
+        synopsis: "普段は軽口ばかり叩く職場の先輩。雨の夜、ふたりきりのオフィスで交わされる境界線スレスレの会話。耳元で囁かれる関西弁に、どこまで耐えられますか？"
+      },
+      {
+        title: "雨宿りの部屋",
+        type: "name",
+        typeName: "◎ 名前で呼ばれる",
+        cover: "chara_02.PNG",
+        author: "雨月 律",
+        cv: "有栖川 蓮",
+        synopsis: "突然の豪雨で駆け込んだ洋館。そこにいた物静かな青年は、なぜか最初からあなたの名前を知っていた――。雨音の密室で繰り広げられる、静謐で狂おしい対話劇。"
+      },
+      {
+        title: "森の囁き",
+        type: "ready",
+        typeName: "◎ すぐ聴ける",
+        cover: "chara_03.PNG",
+        author: "深緑工房",
+        cv: "シグレ",
+        synopsis: "迷い込んだ夜の森。木々のざわめきと、光の粒のなかで出会った謎の案内人。耳から伝わる自然環境音と優しい声が、あなたの疲れた意識を深い眠りへ誘います。"
+      }
+    ];
+
+    // フィルタリング
+    function filterCards(type) {
+      document.querySelectorAll('.filter-chip').forEach(el => el.classList.remove('active'));
+      event.target.classList.add('active');
+
+      const cards = document.querySelectorAll('#cardGrid .card');
+      cards.forEach(card => {
+        if (type === 'all' || card.dataset.type === type) {
+          card.style.display = 'flex';
+        } else {
+          card.style.display = 'none';
+        }
+      });
+    }
+
+    // 詳細モーダル表示
+    function openDetail(index) {
+      const data = works[index];
+      document.getElementById('mCover').src = data.cover;
+      document.getElementById('mTitle').textContent = data.title;
+      document.getElementById('mAuthor').textContent = data.author;
+      document.getElementById('mCV').textContent = data.cv;
+      document.getElementById('mSynopsis').textContent = data.synopsis;
+
+      const badge = document.getElementById('mBadge');
+      badge.textContent = data.typeName;
+      badge.className = `badge-stamp ${data.type}`;
+
+      // 名前対応のみTauri DL案内を表示
+      const tauriBox = document.getElementById('mTauriNotice');
+      tauriBox.style.display = (data.type === 'name') ? 'block' : 'none';
+
+      document.getElementById('detailModal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('detailModal').classList.remove('open');
+    }
+  </script>
+</body>
+</html>

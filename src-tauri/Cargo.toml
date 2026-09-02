@@ -1,0 +1,36 @@
+[package]
+name = "pne-desktop"
+version = "0.1.0"
+description = "P.N.E. Pocket Narrative Engine desktop player"
+authors = ["P.N.E."]
+edition = "2021"
+rust-version = "1.82"
+
+[lib]
+name = "pne_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "=2.6.3", features = [] }
+
+[dependencies]
+tauri = { version = "=2.11.5", features = [] }
+tauri-plugin-deep-link = "=2.4.9"
+tauri-plugin-opener = "=2.5.4"
+serde = { version = "=1.0.228", features = ["derive"] }
+serde_json = "=1.0.145"
+thiserror = "=2.0.16"
+url = "=2.5.7"
+rusqlite = { version = "=0.37.0", features = ["bundled"] }
+sha2 = "=0.10.9"
+hex = "=0.4.3"
+aes-gcm = "=0.10.3"
+base64 = "=0.22.1"
+rand = "=0.8.5"
+uuid = { version = "=1.18.1", features = ["v4"] }
+tokio = { version = "=1.47.1", features = ["rt-multi-thread", "sync", "time", "net"] }
+axum = "=0.8.4"
+local-ip-address = "=0.6.5"
+
+[target.'cfg(any(target_os = "macos", windows, target_os = "linux"))'.dependencies]
+tauri-plugin-single-instance = { version = "=2.4.3", features = ["deep-link"] }

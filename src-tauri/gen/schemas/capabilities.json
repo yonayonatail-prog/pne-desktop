@@ -1,0 +1,1 @@
+{"main-window":{"identifier":"main-window","description":"Minimum permissions for the P.N.E. player main window","local":true,"windows":["main"],"permissions":["core:default","deep-link:default","opener:default"]}}
