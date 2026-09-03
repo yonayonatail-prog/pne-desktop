@@ -1,8 +1,7 @@
 import { IrodoriTTS } from './pipeline.mjs';
 
 const MODEL_REVISION = 'b75a9bbf2c10e12682d37e91e0efaf6d4e54bd29';
-const MODEL_BUNDLE_VERSION = 'pne-bundle-v2-clean-onnx';
-const MODEL_BASE = new URL(`/vendor/irodori-tts-webgpu/models/${MODEL_REVISION}/onnx_fp16/`, document.baseURI);
+const MODEL_BUNDLE_VERSION = 'pne-bundle-v4-verified-models';
 const MODEL_TOTAL_BYTES = 1_255_448_441;
 const MODEL_SOURCE = 'bundled';
 const MODEL_COMPONENTS = [
@@ -14,12 +13,27 @@ const MODEL_COMPONENTS = [
     { key: 'dit', name: 'dit' }
 ];
 
-const VENDORED_RUNTIME_BASE = new URL('/vendor/irodori-tts-webgpu/runtime/', document.baseURI);
-const ORT_MODULE_URL = new URL('ort.webgpu-1.23.0.mjs', VENDORED_RUNTIME_BASE).href;
-const ORT_WASM_MODULE_URL = new URL('ort-wasm-simd-threaded.asyncify.mjs', VENDORED_RUNTIME_BASE).href;
-const ORT_WASM_URL = new URL('ort-wasm-simd-threaded.asyncify.wasm', VENDORED_RUNTIME_BASE).href;
-const TRANSFORMERS_MODULE_URL = new URL('transformers-3.7.6.mjs', VENDORED_RUNTIME_BASE).href;
-const TOKENIZER_PATH = new URL('/vendor/irodori-tts-webgpu/tokenizer/', document.baseURI).href;
+let BUNDLED_ASSET_URLS = null;
+
+export function setBundledAssetUrls(urls) {
+    BUNDLED_ASSET_URLS = {
+        modelBase: String(urls.modelBase),
+        runtimeBase: String(urls.runtimeBase),
+        tokenizerPath: String(urls.tokenizerPath)
+    };
+}
+
+function modelBase() {
+    return new URL(BUNDLED_ASSET_URLS?.modelBase ?? `/vendor/irodori-tts-webgpu/models/${MODEL_REVISION}/onnx_fp16/`, document.baseURI);
+}
+
+function runtimeBase() {
+    return new URL(BUNDLED_ASSET_URLS?.runtimeBase ?? '/vendor/irodori-tts-webgpu/runtime/', document.baseURI);
+}
+
+function tokenizerPath() {
+    return new URL(BUNDLED_ASSET_URLS?.tokenizerPath ?? '/vendor/irodori-tts-webgpu/tokenizer/', document.baseURI).href;
+}
 
 const GENERATED_DB_NAME = 'pne-name-voice-v1';
 const GENERATED_STORE_NAME = 'voices';
@@ -475,10 +489,16 @@ export class IrodoriAdapter {
         let ort;
         let AutoTokenizer;
         let env;
+        const vendoredRuntimeBase = runtimeBase();
+        const ortModuleUrl = new URL('ort.webgpu-1.23.0.mjs', vendoredRuntimeBase).href;
+        const ortWasmModuleUrl = new URL('ort-wasm-simd-threaded.asyncify.mjs', vendoredRuntimeBase).href;
+        const ortWasmUrl = new URL('ort-wasm-simd-threaded.asyncify.wasm', vendoredRuntimeBase).href;
+        const transformersModuleUrl = new URL('transformers-3.7.6.mjs', vendoredRuntimeBase).href;
+        const bundledModelBase = modelBase();
         try {
             const [ortModule, transformersModule] = await Promise.all([
-                import(ORT_MODULE_URL),
-                import(TRANSFORMERS_MODULE_URL)
+                import(ortModuleUrl),
+                import(transformersModuleUrl)
             ]);
             ort = ortModule;
             ({ AutoTokenizer, env } = transformersModule);
@@ -487,21 +507,21 @@ export class IrodoriAdapter {
         }
 
         ort.env.wasm.wasmPaths = {
-            mjs: ORT_WASM_MODULE_URL,
-            wasm: ORT_WASM_URL
+            mjs: ortWasmModuleUrl,
+            wasm: ortWasmUrl
         };
         ort.env.logLevel = 'error';
         env.allowRemoteModels = false;
         env.allowLocalModels = true;
-        env.localModelPath = TOKENIZER_PATH;
+        env.localModelPath = tokenizerPath();
 
         const sessions = {};
         let loadedBytes = 0;
         let lastByteProgressAt = 0;
         for (let index = 0; index < MODEL_COMPONENTS.length; index += 1) {
             const component = MODEL_COMPONENTS[index];
-            const graphUrl = new URL(`${component.name}.onnx?bundle=${MODEL_BUNDLE_VERSION}`, MODEL_BASE).href;
-            const dataUrl = new URL(`${component.name}.onnx.data?bundle=${MODEL_BUNDLE_VERSION}`, MODEL_BASE).href;
+            const graphUrl = new URL(`${component.name}.onnx?bundle=${MODEL_BUNDLE_VERSION}`, bundledModelBase).href;
+            const dataUrl = new URL(`${component.name}.onnx.data?bundle=${MODEL_BUNDLE_VERSION}`, bundledModelBase).href;
             onProgress?.({
                 state: 'loading-model',
                 progress: Math.min(0.9, loadedBytes / MODEL_TOTAL_BYTES * 0.9),

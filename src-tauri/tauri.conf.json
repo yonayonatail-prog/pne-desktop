@@ -11,7 +11,11 @@
   },
   "app": {
     "security": {
-      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' data: blob:; media-src 'self' blob:; worker-src 'self' blob:; style-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'"
+      "csp": "default-src 'self'; script-src 'self' 'wasm-unsafe-eval' http://asset.localhost; connect-src 'self' ipc: http://ipc.localhost http://asset.localhost; img-src 'self' data: blob: http://asset.localhost; media-src 'self' blob: http://asset.localhost; worker-src 'self' blob: http://asset.localhost; style-src 'self'; object-src 'none'; frame-src 'none'; base-uri 'none'; form-action 'none'",
+      "assetProtocol": {
+        "enable": true,
+        "scope": ["$RESOURCE/vendor/irodori-tts-webgpu/**"]
+      }
     },
     "windows": [
       {
@@ -32,6 +36,9 @@
   "bundle": {
     "active": true,
     "targets": ["nsis", "msi"],
+    "resources": {
+      "../img/vendor/irodori-tts-webgpu": "vendor/irodori-tts-webgpu"
+    },
     "icon": ["icons/icon.png", "icons/icon.ico"],
     "windows": { "webviewInstallMode": { "type": "downloadBootstrapper", "silent": true } }
   },

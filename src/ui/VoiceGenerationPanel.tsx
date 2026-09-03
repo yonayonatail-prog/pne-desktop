@@ -128,6 +128,7 @@ export function VoiceGenerationPanel({ projectId, pack, selectedNode, selectedCh
         nodeId: selectedNode.id,
         preset,
         referenceUrl: resolvedReference,
+        firstPerson: selectedCharacter?.first_person,
         paceMultiplier,
         signal: controller.signal,
         onProgress: setProgress

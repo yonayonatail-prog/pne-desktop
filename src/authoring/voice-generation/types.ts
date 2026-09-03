@@ -10,6 +10,11 @@ export interface ContextTake {
   trim_plan: TrimPlan;
 }
 
+export interface ContextBuildOptions {
+  /** Optional character-specific first-person form, e.g. "俺", "僕", or "私". */
+  firstPerson?: string;
+}
+
 export interface DialogueGenerationUnit {
   generation_unit_id: string;
   source_line_ids: string[];

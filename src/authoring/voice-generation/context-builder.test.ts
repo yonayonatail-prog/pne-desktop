@@ -20,4 +20,13 @@ describe("context builder", () => {
     expect(unit.takes[1].generation_text).toContain("次の台詞です。");
     expect(unit.takes[2].trim_plan.predicted_end_ratio).toBeGreaterThan(unit.takes[2].trim_plan.predicted_start_ratio);
   });
+
+  it("ports the first-person context as a prefix before the spoken line", () => {
+    const unit = buildContextVariants(nodes, "N2", { firstPerson: "私" });
+
+    expect(unit.takes[0].prefix_context).toContain("私は相手に向かって話している。");
+    expect(unit.takes[1].prefix_context).toContain("私は感情は少し不安、読みのテンポはゆっくりで相手に話す。");
+    expect(unit.takes[2].prefix_context).toContain("この場面。私は目の前の相手へ自然に言葉を続ける。");
+    expect(unit.takes.every((take) => take.generation_text.indexOf(take.spoken_text) > take.generation_text.indexOf(take.prefix_context))).toBe(true);
+  });
 });

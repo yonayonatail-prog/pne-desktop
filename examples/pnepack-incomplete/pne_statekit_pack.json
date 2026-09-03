@@ -1,0 +1,36 @@
+{
+  "format": "pne_statekit_pack",
+  "schema_version": "1.0.0",
+  "meta": {
+    "title": "雨の部屋・補完サンプル",
+    "version": "1.0.0",
+    "description": "素材スロットを補完するための最小サンプル"
+  },
+  "entry_node": "START",
+  "state_schema": {
+    "variables": [],
+    "flags": []
+  },
+  "nodes": [
+    {
+      "id": "START",
+      "type": "normal",
+      "speaker": "ヒイロ",
+      "text": "雨の音が聞こえる。",
+      "audio": {
+        "voice": "voice_line_001",
+        "se": ["se_rain"]
+      },
+      "display_sequence": [
+        { "text": "雨の音が聞こえる。" },
+        { "image_asset_id": "image_room", "alt": "雨の部屋" }
+      ],
+      "next": "END"
+    },
+    {
+      "id": "END",
+      "type": "end",
+      "text": "おしまい。"
+    }
+  ]
+}

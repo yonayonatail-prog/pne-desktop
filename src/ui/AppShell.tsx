@@ -10,6 +10,7 @@ export function AppShell() {
         <NavLink to="/library" end><span aria-hidden>◈</span><b>ライブラリ</b></NavLink>
         <NavLink to="/afureco"><span aria-hidden>♩</span><b>アフレコ</b></NavLink>
         <NavLink to="/authoring"><span aria-hidden>✎</span><b>制作</b></NavLink>
+        <NavLink to="/packaging"><span aria-hidden>⬡</span><b>パッキング</b></NavLink>
         <NavLink to="/settings"><span aria-hidden>⌘</span><b>設定</b></NavLink>
         <NavLink to="/diagnostics"><span aria-hidden>◎</span><b>診断</b></NavLink>
       </nav>

@@ -1,5 +1,5 @@
 import type { AuthoringNode, TrimPlan } from "../types";
-import type { ContextTake, DialogueGenerationUnit } from "./types";
+import type { ContextBuildOptions, ContextTake, DialogueGenerationUnit } from "./types";
 
 function textOf(node: AuthoringNode | undefined): string {
   return String(node?.text || "").trim();
@@ -58,7 +58,7 @@ function previousOf(nodes: AuthoringNode[], node: AuthoringNode): AuthoringNode 
   }) || nodes[Math.max(0, nodes.indexOf(node) - 1)];
 }
 
-export function buildContextVariants(nodes: AuthoringNode[], nodeId: string): DialogueGenerationUnit {
+export function buildContextVariants(nodes: AuthoringNode[], nodeId: string, options: ContextBuildOptions = {}): DialogueGenerationUnit {
   const node = nodes.find((candidate) => candidate.id === nodeId);
   if (!node) throw new Error(`生成対象ノード ${nodeId} が見つかりません`);
   const spoken = textOf(node);
@@ -71,12 +71,21 @@ export function buildContextVariants(nodes: AuthoringNode[], nodeId: string): Di
   const performance = node.performance || {};
   const tone = String(performance.tone || "").trim();
   const pace = String(performance.pace || "").trim();
-  const performanceHint = [tone && `感情は${tone}。`, pace && `読みのテンポは${pace}。`, "相手に向かって自然に話す。"].filter(Boolean).join(" ");
+  const firstPerson = String(options.firstPerson || "").trim();
+  const scene = String(node.state || node.chapter || "この場面").trim();
+  const performanceParts = [tone && `感情は${tone}`, pace && `読みのテンポは${pace}`].filter(Boolean);
+  const neutralContext = firstPerson ? `${firstPerson}は相手に向かって話している。` : "相手に向かって自然に話している。";
+  const emotionContext = firstPerson
+    ? `${firstPerson}は${performanceParts.length ? `${performanceParts.join("、")}で` : "今の気持ちを込めて"}相手に話す。`
+    : [tone && `感情は${tone}。`, pace && `読みのテンポは${pace}。`, "相手に向かって自然に話す。"].filter(Boolean).join(" ") || "声に感情を込めて話す。";
+  const sceneContext = firstPerson
+    ? `${scene}。${firstPerson}は目の前の相手へ自然に言葉を続ける。`
+    : "場面の状態を受け止めて話している。";
 
   const takes = [
-    makeTake("A", "neutral", [previousText, "相手に向かって自然に話している。"], spoken, []),
-    makeTake("B", "emotion", [previousText, performanceHint || "声に感情を込めて話す。"], spoken, [nextText]),
-    makeTake("C", "scene", [previousText, "場面の状態を受け止めて話している。"], spoken, [nextText])
+    makeTake("A", "neutral", [previousText, neutralContext], spoken, []),
+    makeTake("B", "emotion", [previousText, emotionContext], spoken, [nextText]),
+    makeTake("C", "scene", [previousText, sceneContext], spoken, [nextText])
   ] as [ContextTake, ContextTake, ContextTake];
 
   return {

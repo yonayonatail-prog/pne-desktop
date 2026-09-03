@@ -19,6 +19,7 @@
 - AES-256-GCMで暗号化した開発用`.pne-transfer`、Private LAN一時配信、10分TTL、一度だけの取得
 - 設定／診断画面、production CSP、最小Tauri capability
 - `.pne` v1のmanifest/assets/scenario契約validatorとcontent graph canonical hash
+- 完成版`.pne`のライブラリ取り込み、CRC/SHA-256検証、音声／SE／差し絵のローカル再生
 - 同梱の`rain_room`開発fixtureによるオフライン動作確認
 - ステートキット台本パック`senpai_script_pack_v02_forced_interpretation.json`の46ノード／音声付きサンプル移植
 

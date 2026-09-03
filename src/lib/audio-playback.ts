@@ -61,7 +61,8 @@ export async function unlockAudioPlayback(): Promise<void> {
 }
 
 export async function playAudioSource(source: string | Blob): Promise<boolean> {
-  await releaseMicrophoneForPlayback();
+  const microphoneRelease = releaseMicrophoneForPlayback();
+  if (microphoneRelease) await microphoneRelease;
   stopAudioPlayback();
   const currentRequest = requestId;
   const audio = getAudioElement();
@@ -72,13 +73,6 @@ export async function playAudioSource(source: string | Blob): Promise<boolean> {
     audio.src = activeObjectUrl;
   } else {
     audio.src = source;
-  }
-
-  try {
-    await audio.play();
-  } catch (error) {
-    releaseObjectUrl();
-    throw audioPlaybackError(error, audio);
   }
 
   return new Promise<boolean>((resolve, reject) => {
@@ -92,15 +86,32 @@ export async function playAudioSource(source: string | Blob): Promise<boolean> {
       releaseObjectUrl();
       resolve(played && currentRequest === requestId);
     };
-    activeFinish = finish;
-    audio.onended = () => finish(true);
-    audio.onerror = () => {
+    const fail = (error: unknown) => {
       if (finished) return;
       finished = true;
       activeFinish = null;
+      audio.onended = null;
+      audio.onerror = null;
       releaseObjectUrl();
-      reject(audioPlaybackError(null, audio));
+      reject(audioPlaybackError(error, audio));
     };
+
+    // Register listeners before play(). This matters for Blob-backed WAVs:
+    // WebView2 can dispatch loaded/error/ended synchronously when the source
+    // is already available, and a short clip can otherwise be missed.
+    activeFinish = finish;
+    audio.onended = () => finish(true);
+    audio.onerror = () => fail(null);
+
+    try {
+      audio.load();
+      // Call play without an intervening await so a direct button click keeps
+      // its transient user activation in Windows WebView2.
+      const playResult = audio.play();
+      void Promise.resolve(playResult).catch(fail);
+    } catch (error) {
+      fail(error);
+    }
   });
 }
 

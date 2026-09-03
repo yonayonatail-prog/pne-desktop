@@ -1,5 +1,7 @@
 import type { LocalWork, NameProfile } from "../types";
 import { playAudioSource, stopAudioPlayback, unlockAudioPlayback } from "./audio-playback";
+import { convertFileSrc } from "@tauri-apps/api/core";
+import { resolveResource } from "@tauri-apps/api/path";
 // The source module is the audited browser mock implementation. Its public API
 // is described below because it is intentionally kept as plain ESM.
 // @ts-expect-error The vendored mock module has no TypeScript declaration.
@@ -36,12 +38,45 @@ interface NameVoiceManagerLike {
 
 interface NameVoiceModule {
   NameVoiceManager: new (options: { onState: (event: Record<string, unknown>) => void }) => NameVoiceManagerLike;
+  setBundledAssetUrls?: (urls: { modelBase: string; runtimeBase: string; tokenizerPath: string }) => void;
+}
+
+export interface PreparedNameVoiceTransferClip {
+  clipId: string;
+  slotIds: string[];
+  mime: "audio/wav";
+  durationMs: number;
+  audioBytes: number[];
 }
 
 let modulePromise: Promise<NameVoiceModule> | null = null;
 let manager: NameVoiceManagerLike | null = null;
 let activeListener: ((event: NameVoiceProgress) => void) | null = null;
 let preparedSignature = "";
+let bundledAssetUrlsPromise: Promise<void> | null = null;
+
+const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
+
+async function configureBundledAssetUrls(): Promise<void> {
+  if (!isTauri()) return;
+  if (!bundledAssetUrlsPromise) {
+    bundledAssetUrlsPromise = (async () => {
+      const module = await loadModule();
+      try {
+        const resourcePath = await resolveResource("vendor/irodori-tts-webgpu");
+        const resourceBase = `${convertFileSrc(resourcePath).replace(/\/$/, "")}/`;
+        module.setBundledAssetUrls?.({
+          modelBase: `${resourceBase}models/b75a9bbf2c10e12682d37e91e0efaf6d4e54bd29/onnx_fp16/`,
+          runtimeBase: `${resourceBase}runtime/`,
+          tokenizerPath: `${resourceBase}tokenizer/`
+        });
+      } catch (error) {
+        if (!import.meta.env.DEV) throw error;
+      }
+    })();
+  }
+  await bundledAssetUrlsPromise;
+}
 
 function loadModule(): Promise<NameVoiceModule> {
   if (!modulePromise) {
@@ -119,6 +154,7 @@ export async function prepareNameVoice(
   profile: NameProfile,
   onProgress: (event: NameVoiceProgress) => void
 ): Promise<void> {
+  await configureBundledAssetUrls();
   const instance = await getManager(onProgress);
   const result = await instance.prepare({
     pack: buildNameVoicePack(work, profile),
@@ -140,6 +176,48 @@ function preparedBlob(work: LocalWork, profile: NameProfile, slotId: string): Bl
   if (!slot) return null;
   const voiceId = slot.voice_id ?? DEFAULT_VOICE_ID;
   return manager.get({ voiceId, form: resolvedForm(slot, profile) })?.blob ?? null;
+}
+
+function wavDurationMs(bytes: Uint8Array): number {
+  if (bytes.byteLength < 44) return 0;
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+  const channels = view.getUint16(22, true);
+  const sampleRate = view.getUint32(24, true);
+  const bitsPerSample = view.getUint16(34, true);
+  const bytesPerSample = channels * (bitsPerSample / 8);
+  if (!channels || !sampleRate || !bytesPerSample) return 0;
+  return Math.round(((bytes.byteLength - 44) / bytesPerSample / sampleRate) * 1000);
+}
+
+export async function getPreparedNameVoiceTransferClips(
+  work: LocalWork,
+  profile: NameProfile
+): Promise<PreparedNameVoiceTransferClip[]> {
+  const grouped = new Map<string, { blob: Blob; slotIds: string[] }>();
+  for (const slot of work.nameSlots) {
+    const voiceId = slot.voice_id ?? DEFAULT_VOICE_ID;
+    const form = resolvedForm(slot, profile);
+    const key = `${voiceId}\u0000${form}`;
+    const blob = preparedBlob(work, profile, slot.slot_id);
+    if (!blob) throw new Error("転送する名前音声が見つかりません。名前画面からもう一度生成してください。");
+    const current = grouped.get(key);
+    if (current) current.slotIds.push(slot.slot_id);
+    else grouped.set(key, { blob, slotIds: [slot.slot_id] });
+  }
+
+  const clips: PreparedNameVoiceTransferClip[] = [];
+  let index = 0;
+  for (const { blob, slotIds } of grouped.values()) {
+    const bytes = new Uint8Array(await blob.arrayBuffer());
+    clips.push({
+      clipId: `clip-${String(++index).padStart(2, "0")}-${crypto.randomUUID()}`,
+      slotIds,
+      mime: "audio/wav",
+      durationMs: wavDurationMs(bytes),
+      audioBytes: Array.from(bytes)
+    });
+  }
+  return clips;
 }
 
 export async function previewNameVoice(work: LocalWork, profile: NameProfile): Promise<void> {

@@ -26,6 +26,10 @@ export interface LocalWork {
   scenario: Scenario;
   nameSlots: NameSlot[];
   nameVoice?: LocalNameVoiceConfig;
+  /** Runtime-only URLs created when a completed .pne archive is opened. */
+  assetUrls?: Record<string, string>;
+  /** Runtime-only asset kinds used by the player and diagnostics. */
+  assetKinds?: Record<string, string>;
 }
 
 export interface LocalVoiceProfile {

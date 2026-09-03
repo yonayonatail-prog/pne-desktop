@@ -21,6 +21,7 @@ const MIN_SILENCE_MS = 80;
 const THRESHOLD_DB = -40;
 const START_PAD_MS = 30;
 const END_PAD_MS = 50;
+const BOUNDARY_SEARCH_MS = 2_500;
 
 function dbToAmplitude(db: number): number {
   return 10 ** (db / 20);
@@ -76,28 +77,82 @@ function clampIndex(value: number, minimum: number, maximum: number): number {
   return Math.max(minimum, Math.min(maximum, Math.round(value)));
 }
 
+interface SilenceInterval {
+  startMs: number;
+  endMs: number;
+}
+
+function inferSilenceIntervals(segments: SpeechSegment[], durationMs: number): SilenceInterval[] {
+  const intervals: SilenceInterval[] = [];
+  let cursor = 0;
+  for (const segment of segments) {
+    const startMs = Math.max(0, Math.min(durationMs, segment.startMs));
+    if (startMs > cursor) intervals.push({ startMs: cursor, endMs: startMs });
+    cursor = Math.max(cursor, Math.min(durationMs, segment.endMs));
+  }
+  if (cursor < durationMs) intervals.push({ startMs: cursor, endMs: durationMs });
+  return intervals;
+}
+
+function findBoundary(
+  silences: SilenceInterval[],
+  predictedMs: number,
+  minimumMidpoint = Number.NEGATIVE_INFINITY,
+  maximumMidpoint = Number.POSITIVE_INFINITY
+): SilenceInterval | undefined {
+  const candidates = silences
+    .map((interval) => ({ interval, midpoint: (interval.startMs + interval.endMs) / 2 }))
+    .filter(({ midpoint }) => midpoint >= minimumMidpoint && midpoint <= maximumMidpoint)
+    .sort((left, right) => Math.abs(left.midpoint - predictedMs) - Math.abs(right.midpoint - predictedMs));
+  const best = candidates[0];
+  return best && Math.abs(best.midpoint - predictedMs) <= BOUNDARY_SEARCH_MS ? best.interval : undefined;
+}
+
 export function trimAudio(samples: Float32Array, sampleRate: number, plan: TrimPlan): TrimResult {
   const durationMs = samples.length / sampleRate * 1000;
   const segments = detectSpeechSegments(samples, sampleRate);
+  const silences = inferSilenceIntervals(segments, durationMs);
   const predictedStart = durationMs * plan.predicted_start_ratio;
   const predictedEnd = durationMs * plan.predicted_end_ratio;
   let status: TrimStatus = "ok";
-  let startMs = predictedStart;
-  let endMs = predictedEnd;
+  let startMs = segments[0]?.startMs ?? predictedStart;
+  let endMs = segments.at(-1)?.endMs ?? predictedEnd;
   const warnings: string[] = [];
 
-  if (segments.length >= 3) {
-    const target = segments[Math.min(1, segments.length - 1)];
-    startMs = target.startMs;
-    endMs = target.endMs;
+  if (!segments.length) {
+    status = "silence_not_found";
+    startMs = predictedStart;
+    endMs = predictedEnd;
+    warnings.push("発話境界を検出できず、文字比率で切り出しました");
   } else {
-    const overlapping = segments.find((segment) => segment.endMs >= predictedStart && segment.startMs <= predictedEnd);
-    if (overlapping) {
-      startMs = overlapping.startMs;
-      endMs = overlapping.endMs;
-    } else {
-      status = segments.length ? "ratio_fallback" : "silence_not_found";
-      warnings.push(segments.length ? "対象台詞の発話境界を特定できず、文字比率で切り出しました" : "発話境界を検出できず、文字比率で切り出しました");
+    if (plan.prefix_chars > 0) {
+      const startBoundary = findBoundary(silences, predictedStart, Number.NEGATIVE_INFINITY, predictedEnd);
+      if (startBoundary) startMs = startBoundary.endMs;
+      else {
+        status = "ratio_fallback";
+        startMs = predictedStart;
+        warnings.push("対象台詞の開始境界を特定できず、文字比率で切り出しました");
+      }
+    }
+
+    if (plan.suffix_chars > 0) {
+      const startMidpoint = plan.prefix_chars > 0
+        ? (silences.find((interval) => interval.endMs === startMs)?.startMs ?? predictedStart)
+        : predictedStart;
+      const endBoundary = findBoundary(silences, predictedEnd, Math.max(predictedStart, startMidpoint + 1), Number.POSITIVE_INFINITY);
+      if (endBoundary) endMs = endBoundary.startMs;
+      else {
+        status = "ratio_fallback";
+        endMs = predictedEnd;
+        warnings.push("対象台詞の終了境界を特定できず、文字比率で切り出しました");
+      }
+    }
+
+    if (endMs <= startMs + MIN_SPEECH_MS) {
+      status = "ratio_fallback";
+      startMs = predictedStart;
+      endMs = predictedEnd;
+      warnings.push("対象台詞の前後境界が重なったため、文字比率で切り出しました");
     }
   }
 

@@ -3,9 +3,10 @@ mod authoring;
 mod persistence;
 mod transfer;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::{
     collections::HashMap,
+    fs,
     path::{Path, PathBuf},
     sync::{atomic::AtomicU64, Mutex},
 };
@@ -61,6 +62,21 @@ struct DiagnosticsSnapshot {
     storage_bytes: u64,
     model_state: &'static str,
     release_configuration: &'static str,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct AfurecoPendingTake {
+    take_id: String,
+    audio_bytes: Vec<u8>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AfurecoPendingFilesResult {
+    directory: String,
+    file_count: usize,
+    native: bool,
 }
 
 #[tauri::command]
@@ -148,6 +164,52 @@ fn portal_open(app: tauri::AppHandle, target: String) -> Result<(), AppError> {
         .map_err(|error| AppError::new("PORTAL_OPEN_FAILED", error.to_string()))
 }
 
+#[tauri::command]
+fn afureco_export_pending_takes(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    project_id: String,
+    takes: Vec<AfurecoPendingTake>,
+) -> Result<AfurecoPendingFilesResult, AppError> {
+    validate_id(&project_id)?;
+    if takes.is_empty() {
+        return Err(AppError::new("NO_PENDING_TAKES", "提出待ちの録音ファイルがありません"));
+    }
+
+    let export_dir = state
+        .data_dir
+        .join("recording_projects")
+        .join(&project_id)
+        .join("pending-submissions");
+    fs::create_dir_all(&export_dir)?;
+
+    for take in &takes {
+        validate_id(&take.take_id)?;
+        if take.audio_bytes.is_empty() {
+            return Err(AppError::new("EMPTY_TAKE", "空の録音ファイルは保存できません"));
+        }
+        if take.audio_bytes.len() > 16 * 1024 * 1024 {
+            return Err(AppError::new("TAKE_TOO_LARGE", "録音ファイルは16 MiB以内で保存してください"));
+        }
+        let path = export_dir.join(format!("take-{}.wav", take.take_id));
+        let temp_path = path.with_extension("wav.tmp");
+        fs::write(&temp_path, &take.audio_bytes)?;
+        if path.exists() {
+            fs::remove_file(&path)?;
+        }
+        fs::rename(temp_path, path)?;
+    }
+
+    app.opener()
+        .reveal_item_in_dir(&export_dir)
+        .map_err(|error| AppError::new("EXPLORER_OPEN_FAILED", error.to_string()))?;
+    Ok(AfurecoPendingFilesResult {
+        directory: export_dir.to_string_lossy().into_owned(),
+        file_count: takes.len(),
+        native: true,
+    })
+}
+
 fn validate_id(value: &str) -> Result<(), AppError> {
     let bytes = value.as_bytes();
     if bytes.is_empty()
@@ -225,6 +287,7 @@ pub fn run() {
             session_delete_dev,
             diagnostics_snapshot,
             portal_open,
+            afureco_export_pending_takes,
             transfer::transfer_start_dev,
             transfer::transfer_stop_dev,
             authoring::project_save,

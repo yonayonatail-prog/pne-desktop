@@ -14,6 +14,7 @@ import { MobileImportScreen } from "./ui/MobileImportScreen";
 import { AfurecoScreen } from "./ui/AfurecoScreen";
 import { AfurecoProjectScreen } from "./ui/AfurecoProjectScreen";
 import { AuthoringScreen } from "./ui/AuthoringScreen";
+import { PnePackScreen } from "./ui/PnePackScreen";
 import { NotFoundScreen } from "./ui/NotFoundScreen";
 import { WorksProvider } from "./ui/works-context";
 import "./styles.css";
@@ -32,6 +33,7 @@ const router = createBrowserRouter([
       { path: "settings", element: <SettingsScreen /> },
       { path: "diagnostics", element: <DiagnosticsScreen /> },
       { path: "authoring", element: <AuthoringScreen /> },
+      { path: "packaging", element: <PnePackScreen /> },
       { path: "*", element: <NotFoundScreen /> }
     ]
   },

@@ -6,7 +6,7 @@ export const SAMPLE_AUTHORING_PACK: AuthoringPack = {
   meta: { title: "雨の部屋", version: "1.0.0-dev", author: "P.N.E. Studio", description: "雨音の向こうから届く声に、あなたの反応が物語の記憶として残る短編。" },
   entry_node: "START",
   characters: [
-    { character_id: "char_hiiro", name: "ヒイロ", color: "pink", voice_preset_id: "preset_hiiro_f01", profile: { role: "雨の向こうから話しかける人", public_face: "静かでやさしい", hidden_truth: "返事の有無を大切な記憶として受け取る", desire: "ひとりではないと確かめたい", fear: "声が届かないこと", relationship_axis: "あなたを待つ側から、隣にいる側へ" } },
+    { character_id: "char_hiiro", name: "ヒイロ", color: "pink", voice_preset_id: "preset_hiiro_f01", first_person: "私", profile: { role: "雨の向こうから話しかける人", public_face: "静かでやさしい", hidden_truth: "返事の有無を大切な記憶として受け取る", desire: "ひとりではないと確かめたい", fear: "声が届かないこと", relationship_axis: "あなたを待つ側から、隣にいる側へ" } },
     { character_id: "char_narrator", name: "？？？", color: "gold", profile: { role: "耳で物語を運ぶ声", public_face: "簡潔で明瞭", hidden_truth: "入力を意味ではなく出来事として記録する", notes: "UI案内は短く直接的にする" } }
   ],
   character_timelines: [

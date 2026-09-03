@@ -1,0 +1,41 @@
+{
+  "format": "pne_statekit_pack",
+  "schema_version": "1.0.0",
+  "meta": {
+    "title": "P.N.E. 再生ランタイムサンプル",
+    "version": "1.0.0",
+    "description": "完成版PNEの読み込み、音声、SE、画像表示を確認するための最小サンプル"
+  },
+  "entry_node": "INTRO",
+  "state_schema": {
+    "variables": [],
+    "flags": []
+  },
+  "nodes": [
+    {
+      "id": "INTRO",
+      "type": "normal",
+      "speaker": "サンプル",
+      "text": "音声・SE・画像の再生テストです。",
+      "timeline_ms": 0,
+      "audio": {
+        "voice": "voice_intro",
+        "se": ["se_click"]
+      },
+      "display_sequence": [
+        { "text": "音声・SE・画像の再生テストです。" },
+        { "image_asset_id": "scene", "alt": "再生テスト用の背景" }
+      ],
+      "next": "END"
+    },
+    {
+      "id": "END",
+      "type": "end",
+      "text": "再生完了。",
+      "timeline_ms": 5000,
+      "display_sequence": [
+        { "text": "再生完了。" }
+      ]
+    }
+  ]
+}

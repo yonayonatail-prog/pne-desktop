@@ -104,6 +104,8 @@ export interface AuthoringCharacter {
   name: string;
   color?: string;
   voice_preset_id?: string;
+  /** Character-specific first-person form used by the context TTS take. */
+  first_person?: string;
   profile: AuthoringProfile;
 }
 
@@ -170,6 +172,7 @@ export interface AuthoringNode {
   node_id?: string;
   source_unit_id?: string;
   chapter?: string;
+  state?: string;
   type: AuthoringNodeType;
   purpose?: string;
   player_experience?: string;

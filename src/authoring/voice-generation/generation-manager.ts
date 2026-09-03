@@ -45,11 +45,28 @@ function errorDetail(error: unknown): string | undefined {
   return detail ? detail.replace(/https?:\/\/[^\s"'<>]+/g, "[URL]").slice(0, 500) : undefined;
 }
 
+function assertUsableAudio(samples: Float32Array): void {
+  if (samples.length === 0) {
+    throw Object.assign(new Error("生成された音声データが空です"), { code: "INVALID_GENERATED_AUDIO" });
+  }
+  let peak = 0;
+  for (const sample of samples) {
+    if (!Number.isFinite(sample)) {
+      throw Object.assign(new Error("生成された音声データに無効な値が含まれています"), { code: "INVALID_GENERATED_AUDIO" });
+    }
+    peak = Math.max(peak, Math.abs(sample));
+  }
+  if (peak < 1e-5) {
+    throw Object.assign(new Error("生成された音声が無音です。モデルデータを確認してください"), { code: "INVALID_GENERATED_AUDIO" });
+  }
+}
+
 export interface GenerateRoundInput {
   nodes: Parameters<typeof buildContextVariants>[0];
   nodeId: string;
   preset: VoicePreset;
   referenceUrl: string;
+  firstPerson?: string;
   paceMultiplier?: number;
   roundId?: string;
   seedBase?: number;
@@ -67,7 +84,7 @@ export class DialogueVoiceGenerator {
     if (!input.referenceUrl) {
       throw Object.assign(new Error("参照音声を選択してください"), { code: "VOICE_REFERENCE_MISSING" });
     }
-    const unit: DialogueGenerationUnit = buildContextVariants(input.nodes, input.nodeId);
+    const unit: DialogueGenerationUnit = buildContextVariants(input.nodes, input.nodeId, { firstPerson: input.firstPerson });
     const paceMultiplier = normalizePaceMultiplier(input.paceMultiplier ?? 1);
     const seconds = estimateSeconds(unit.spoken_text, paceMultiplier);
     const seedBase = input.seedBase ?? randomSeed();
@@ -88,16 +105,25 @@ export class DialogueVoiceGenerator {
           signal: input.signal,
           onProgress: (event) => {
             const rawProgress = Number(event.progress ?? 0);
+            if (event.state === "loading-model") {
+              input.onProgress?.({
+                stage: "preparing",
+                progress: Math.max(0, Math.min(0.25, rawProgress * 0.25)),
+                message: "Irodoriモデルを読み込んでいます（初回は時間がかかります）"
+              });
+              return;
+            }
             input.onProgress?.({
               stage: "generating",
-              progress: Math.min(0.95, variantProgress + Math.max(0, Math.min(1, rawProgress)) / unit.takes.length),
+              progress: 0.25 + Math.min(0.65, (variantProgress + Math.max(0, Math.min(1, rawProgress)) / unit.takes.length) * 0.65),
               variant: take.variant,
               message: `${take.variant}を生成しています`
             });
           }
         });
+        assertUsableAudio(raw.audio);
         referenceFingerprint ||= raw.referenceFingerprint;
-        input.onProgress?.({ stage: "trimming", progress: variantProgress + 0.28 / unit.takes.length, variant: take.variant, message: `${take.variant}をTrimしています` });
+        input.onProgress?.({ stage: "trimming", progress: 0.9 + variantProgress * 0.08, variant: take.variant, message: `${take.variant}をTrimしています` });
         const trimmed = trimAudio(raw.audio, raw.sampleRate, take.trim_plan);
         candidates.push({
           candidate_id: `${roundId}_${take.variant}`,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { normalizeAfurecoProject, parseAfurecoProjectJson } from "./afureco-import";
+import { normalizeAfurecoProject, parseAfurecoProjectJson, splitDynamicNameText } from "./afureco-import";
 
 describe("afureco JSON import", () => {
   it("converts a statekit nodes pack and resolves character names", () => {
@@ -19,14 +19,35 @@ describe("afureco JSON import", () => {
     expect(project.lines[0]).toMatchObject({ nodeId: "START", speakerName: "ヒイロ", text: "聞こえる？", direction: "tone: quiet / pace: slow" });
   });
 
-  it("supports scenario display sequences and keeps name slots in the recording text", () => {
+  it("splits a dynamic name out of scenario display sequences", () => {
     const project = parseAfurecoProjectJson(JSON.stringify({
       workId: "scenario-work",
       title: "シナリオ", 
-      scenario: { nodes: [{ id: "N1", speaker: "？？？", display_sequence: [{ text: "……" }, { name_slot_id: "name" }, { text: "。" }] }] }
+      scenario: { nodes: [{ id: "N1", speaker: "？？？", display_sequence: [{ text: "先輩、" }, { name_slot_id: "name" }, { text: "先輩、合ってます？" }] }] }
     }), "scenario.json");
 
-    expect(project.lines[0]).toMatchObject({ nodeId: "N1", text: "……{{name}}。", speakerName: "？？？" });
+    expect(project.lines.map((line) => line.text)).toEqual(["先輩、", "先輩、合ってます？"]);
+    expect(project.lines[0]).toMatchObject({ nodeId: "N1", sourceLineId: "N1", segmentIndex: 0, segmentCount: 2, nameSlotsAfter: [{ slotId: "name", template: "{{name}}" }] });
+    expect(project.lines[1]).toMatchObject({ sourceLineId: "N1", segmentIndex: 1, segmentCount: 2, nameSlotsBefore: [{ slotId: "name", template: "{{name}}" }] });
+  });
+
+  it("creates separate recording lines for the user-name alias", () => {
+    const project = normalizeAfurecoProject({
+      lines: [{ line_id: "GREETING", speaker: "蒼汰", text: "先輩、{{user}}先輩、合ってます？" }]
+    }, "greeting.json");
+
+    expect(project.lines.map((line) => line.text)).toEqual(["先輩、", "先輩、合ってます？"]);
+    expect(project.lines.map((line) => line.lineId)).toEqual([
+      expect.stringContaining("GREETING-part-01"),
+      expect.stringContaining("GREETING-part-02")
+    ]);
+  });
+
+  it("accepts user aliases and preserves a form on dynamic name tokens", () => {
+    expect(splitDynamicNameText("前{{user:senpai}}後", "name.custom")).toEqual([
+      { text: "前", nameSlotsAfter: [{ slotId: "name.custom", template: "{{user:senpai}}", form: "senpai" }] },
+      { text: "後", nameSlotsBefore: [{ slotId: "name.custom", template: "{{user:senpai}}", form: "senpai" }] }
+    ]);
   });
 
   it("flattens canonical script-pack lines and narration for afureco", () => {

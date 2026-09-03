@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ChangeEvent } from "react";
+import { useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { platform } from "../lib/platform";
 import { PageHeader } from "./shared";
@@ -10,6 +10,13 @@ import type { VoiceCandidateAudio, VoiceRoundWithAudio } from "../authoring/voic
 
 const INPUTS = ["VOICE", "SILENT", "UNKNOWN"] as const;
 type RuntimeSnapshot = { currentId: string; runtime: Record<string, unknown>; path: string[] };
+type SaveFileHandle = { createWritable: () => Promise<{ write: (contents: string) => Promise<void>; close: () => Promise<void> }> };
+type WindowWithSavePicker = Window & {
+  showSaveFilePicker?: (options: {
+    suggestedName: string;
+    types: Array<{ description: string; accept: Record<string, string[]> }>;
+  }) => Promise<SaveFileHandle>;
+};
 
 const clone = <T,>(value: T): T => JSON.parse(JSON.stringify(value)) as T;
 const nodeText = (node: AuthoringNode) => node.text || "（本文なし）";
@@ -17,6 +24,41 @@ const nodeTypeLabel: Record<string, string> = { start: "開始", normal: "通常
 
 const isRecord = (value: unknown): value is Record<string, any> => value !== null && typeof value === "object" && !Array.isArray(value);
 const asText = (value: unknown, fallback = "") => typeof value === "string" ? value : value == null ? fallback : String(value);
+
+function suggestedScriptFileName(title: string): string {
+  const safeTitle = title.trim().replace(/[<>:"/\\|?*\u0000-\u001F]/g, "-").replace(/[. ]+$/g, "").trim();
+  return `${safeTitle || "新しい台本"}.json`;
+}
+
+function normalizeScriptFileName(value: string): string {
+  const trimmed = value.trim();
+  const base = trimmed.replace(/\.json$/i, "").trim();
+  if (!base) throw new Error("ファイル名を入力してください");
+  if (/[<>:"/\\|?*\u0000-\u001F]/.test(base) || /[. ]$/.test(base)) {
+    throw new Error("ファイル名に使用できない文字が含まれています");
+  }
+  if (base.length > 120) throw new Error("ファイル名は120文字以内で入力してください");
+  return `${base}.json`;
+}
+
+function createEmptyAuthoringPack(title: string): AuthoringPack {
+  return {
+    format: "pne_statekit_pack",
+    schema_version: "1.0.0",
+    meta: { title, version: "draft" },
+    entry_node: "START",
+    characters: [],
+    character_timelines: [],
+    experience_routes: [{ route_id: "route_main", kind: "main", label: "Main", entry_unit_id: "" }],
+    experience_timeline: [],
+    experience_links: [],
+    mislead_foreshadow_registry: [],
+    state_schema: { variables: [], flags: [] },
+    pne_rules: { input_types: [...INPUTS], unknown_behavior: "progress", reaction_loop_max_turns: 1 },
+    runtime_state: { memory: {} },
+    nodes: [{ id: "START", type: "start", speaker: "", text: "", next: null }]
+  };
+}
 
 function parseJsonText(text: string, filename: string): unknown {
   const source = text.replace(/^\uFEFF/, "");
@@ -44,7 +86,9 @@ function normalizeImportedJson(value: unknown, filename = "JSON"): AuthoringPack
     : isRecord(source.character_definitions)
       ? Object.entries(source.character_definitions).map(([character_id, character]) => ({ character_id, ...(isRecord(character) ? character : { name: character }) }))
       : isRecord(source.character_definition)
-        ? Object.entries(source.character_definition).map(([character_id, character]) => ({ character_id, ...(isRecord(character) ? character : { name: character }) }))
+        ? (Object.prototype.hasOwnProperty.call(source.character_definition, "id") || Object.prototype.hasOwnProperty.call(source.character_definition, "character_id") || Object.prototype.hasOwnProperty.call(source.character_definition, "name") || Object.prototype.hasOwnProperty.call(source.character_definition, "full_name")
+          ? [source.character_definition]
+          : Object.entries(source.character_definition).map(([character_id, character]) => ({ character_id, ...(isRecord(character) ? character : { name: character }) })))
         : [];
   const nodes: AuthoringNode[] = rawNodes.map((rawNode, index) => {
     const node = isRecord(rawNode) ? rawNode : {};
@@ -65,6 +109,7 @@ function normalizeImportedJson(value: unknown, filename = "JSON"): AuthoringPack
       type: (asText(node.type, "normal") || "normal") as AuthoringNode["type"],
       source_unit_id: asText(node.source_unit_id) || undefined,
       chapter: asText(node.chapter) || undefined,
+      state: asText(node.state) || undefined,
       speaker: asText(node.speaker) || lineSpeaker || "",
       text: asText(node.text ?? node.dialogue ?? node.narrative_description) || lineText,
       next: typeof node.next === "string" ? node.next : nextIds?.[0] || null,
@@ -89,9 +134,10 @@ function normalizeImportedJson(value: unknown, filename = "JSON"): AuthoringPack
     if (!characterId) continue;
     characterMap.set(characterId, {
       character_id: characterId,
-      name: asText(character.name, characterId),
+      name: asText(character.name || character.full_name, characterId),
       color: asText(character.color, "purple"),
       voice_preset_id: asText(character.voice_preset_id) || undefined,
+      first_person: asText(character.first_person || character.firstPerson) || undefined,
       profile: isRecord(character.profile) ? character.profile : {}
     });
   }
@@ -371,6 +417,11 @@ export function AuthoringScreen() {
   const [selectedNodeId, setSelectedNodeId] = useState(SAMPLE_AUTHORING_PACK.entry_node);
   const [selectedCharacterId, setSelectedCharacterId] = useState(SAMPLE_AUTHORING_PACK.characters[0]?.character_id || "");
   const [runtime, setRuntime] = useState<RuntimeSnapshot>(() => ({ currentId: SAMPLE_AUTHORING_PACK.entry_node, runtime: clone(SAMPLE_AUTHORING_PACK.runtime_state), path: [SAMPLE_AUTHORING_PACK.entry_node] }));
+  const [fileName, setFileName] = useState(() => suggestedScriptFileName(SAMPLE_AUTHORING_PACK.meta.title));
+  const [showNewScriptDialog, setShowNewScriptDialog] = useState(false);
+  const [newScriptTitle, setNewScriptTitle] = useState("新しい台本");
+  const [newScriptFileName, setNewScriptFileName] = useState("新しい台本.json");
+  const [newScriptError, setNewScriptError] = useState("");
   const [dirty, setDirty] = useState(false);
   const [message, setMessage] = useState("サンプルを読み込みました");
   const [showRaw, setShowRaw] = useState(false);
@@ -389,6 +440,7 @@ export function AuthoringScreen() {
       setSelectedNodeId(restored.entry_node);
       setSelectedCharacterId(restored.characters[0]?.character_id || "");
       setRuntime({ currentId: restored.entry_node, runtime: clone(restored.runtime_state), path: [restored.entry_node] });
+      setFileName(suggestedScriptFileName(restored.meta.title));
       setMessage("前回の下書きを読み込みました");
     }).catch(() => {});
     return () => { active = false; };
@@ -449,11 +501,72 @@ export function AuthoringScreen() {
     catch (error) { setMessage(error instanceof Error ? error.message : "保存に失敗しました"); }
   };
 
-  const exportPack = () => {
-    const blob = new Blob([JSON.stringify(pack, null, 2) + "\n"], { type: "application/json;charset=utf-8" });
-    const url = URL.createObjectURL(blob); const anchor = document.createElement("a");
-    anchor.href = url; anchor.download = `${projectIdFor(pack)}.json`; anchor.click(); URL.revokeObjectURL(url);
-    setDirty(false); setMessage("正本JSONを書き出しました");
+  const saveAsFile = async () => {
+    let normalizedFileName: string;
+    try { normalizedFileName = normalizeScriptFileName(fileName); }
+    catch (error) { setMessage(error instanceof Error ? error.message : "ファイル名を確認してください"); return; }
+
+    const contents = `${JSON.stringify(pack, null, 2)}\n`;
+    try {
+      const picker = (window as WindowWithSavePicker).showSaveFilePicker;
+      if (picker) {
+        const handle = await picker({
+          suggestedName: normalizedFileName,
+          types: [{ description: "P.N.E. 台本JSON", accept: { "application/json": [".json"] } }]
+        });
+        const writable = await handle.createWritable();
+        await writable.write(contents);
+        await writable.close();
+      } else {
+        const blob = new Blob([contents], { type: "application/json;charset=utf-8" });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = normalizedFileName;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 0);
+      }
+      setFileName(normalizedFileName);
+      setDirty(false);
+      setMessage(`${normalizedFileName}として保存しました`);
+    } catch (error) {
+      if (error instanceof DOMException && error.name === "AbortError") {
+        setMessage("ファイル保存をキャンセルしました");
+      } else {
+        setMessage(error instanceof Error ? error.message : "ファイル保存に失敗しました");
+      }
+    }
+  };
+
+  const openNewScriptDialog = () => {
+    if (dirty && !window.confirm("保存していない変更があります。新しい台本を作成しますか？")) return;
+    setNewScriptTitle("新しい台本");
+    setNewScriptFileName("新しい台本.json");
+    setNewScriptError("");
+    setShowNewScriptDialog(true);
+  };
+
+  const createNewScript = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const title = newScriptTitle.trim();
+    if (!title) { setNewScriptError("台本名を入力してください"); return; }
+    let normalizedFileName: string;
+    try { normalizedFileName = normalizeScriptFileName(newScriptFileName); }
+    catch (error) { setNewScriptError(error instanceof Error ? error.message : "ファイル名を確認してください"); return; }
+
+    const freshPack = createEmptyAuthoringPack(title);
+    setPack(freshPack);
+    setSelectedNodeId(freshPack.entry_node);
+    setSelectedCharacterId("");
+    setRuntime({ currentId: freshPack.entry_node, runtime: clone(freshPack.runtime_state), path: [freshPack.entry_node] });
+    setFileName(normalizedFileName);
+    setDirty(true);
+    setTab("script");
+    setShowRaw(false);
+    setShowNewScriptDialog(false);
+    setMessage(`${normalizedFileName}を新規作成しました`);
   };
 
   const importPack = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -464,6 +577,7 @@ export function AuthoringScreen() {
       const imported = normalizeImportedJson(parsed, file.name);
       setPack(imported); setSelectedNodeId(imported.entry_node); setSelectedCharacterId(imported.characters[0]?.character_id || "");
       setRuntime({ currentId: imported.entry_node, runtime: clone(imported.runtime_state), path: [imported.entry_node] });
+      setFileName(suggestedScriptFileName(file.name.replace(/\.json$/i, "")));
       setDirty(true); setMessage(`${file.name}を読み込みました（不足項目は補完して検証中）`);
     } catch (error) { console.error("Authoring JSON import failed:", error); setMessage(error instanceof Error ? error.message : "JSONを読み込めませんでした"); }
   };
@@ -518,6 +632,7 @@ export function AuthoringScreen() {
       <div className="authoring-form-grid">
         <label>表示名<input value={selectedCharacter.name} onChange={(event) => updateCharacter({ name: event.target.value })} /></label>
         <label>キャラクターID<input value={selectedCharacter.character_id} onChange={(event) => { const nextId = event.target.value; updateCharacter({ character_id: nextId }); setSelectedCharacterId(nextId); }} /></label>
+        <label>一人称（文脈生成）<input value={selectedCharacter.first_person || ""} placeholder="例：私 / 僕 / 俺" onChange={(event) => updateCharacter({ first_person: event.target.value || undefined })} /></label>
       </div>
       <div className="authoring-profile-card"><div className="authoring-section-head"><h3>プロフィール</h3><span>作品設計の原本</span></div><div className="authoring-form-grid two">
         {([["role", "役割"], ["public_face", "表の人物像"], ["hidden_truth", "裏の真実"], ["desire", "欲求"], ["fear", "恐れ"], ["core_wound", "核心となる傷"], ["relationship_axis", "関係性"]] as const).map(([key, label]) => <label key={key}>{label}<textarea rows={2} value={selectedCharacter.profile[key] || ""} onChange={(event) => updateProfile(key, event.target.value)} /></label>)}
@@ -541,5 +656,5 @@ export function AuthoringScreen() {
     <aside className="authoring-runtime-panel"><div className="authoring-section-head"><h3>Runtime Preview</h3><span>{runtime.path.length} nodes</span></div><div className="runtime-current"><span className="node-type-chip">現在位置</span><code>{currentRuntimeNode?.id}</code><h3>{currentRuntimeNode?.speaker || "話者未設定"}</h3><p>{currentRuntimeNode ? nodeText(currentRuntimeNode) : ""}</p></div><div className="runtime-actions"><button className="button secondary" onClick={backRuntime} disabled={runtime.path.length < 2}>← 戻る</button><button className="button secondary" onClick={resetRuntime}>↺ リセット</button>{currentRuntimeNode && currentRuntimeNode.type !== "end" && !currentRuntimeNode.reaction_window && <button className="button primary" onClick={() => transition()}>次へ →</button>}</div>{currentRuntimeNode?.reaction_window && <><p className="runtime-prompt">反応入力をシミュレーション</p><div className="runtime-input-grid">{INPUTS.map((input) => <button key={input} className="button secondary" onClick={() => transition(input)}>{input}<small>{currentRuntimeNode.reaction_window?.branches?.[input] || "未設定"}</small></button>)}</div></>}<div className="runtime-state"><div className="authoring-section-head"><h3>Current state</h3><span>実行中</span></div><pre>{JSON.stringify(runtime.runtime, null, 2)}</pre></div><div className="runtime-presets"><div className="authoring-section-head"><h3>Route Presets</h3><span>一括走査</span></div>{INPUTS.map((input) => <button key={input} onClick={() => runPreset(input)}>{input}</button>)}</div><div className="runtime-path"><h3>通過経路</h3><p>{runtime.path.join(" → ")}</p></div></aside>
   </div>;
 
-  return <div className="page authoring-page"><PageHeader eyebrow="AUTHORING STUDIO" title="ステート台本パック制作"><div className="authoring-toolbar"><label className="button secondary">JSONを開く<input type="file" accept=".json,application/json" hidden onChange={importPack} /></label><button className="button secondary" onClick={exportPack}>JSONを書き出す</button><button className="button primary" onClick={save}>保存{dirty ? "*" : ""}</button></div></PageHeader><div className="authoring-status"><span className={issues.some((item) => item.level === "error") ? "status-error" : "status-ok"}>●</span><b>{pack.meta.title}</b><span>{pack.meta.version}</span><span>{message}</span><span className="status-count">{issues.filter((item) => item.level === "error").length} errors · {issues.filter((item) => item.level === "warning").length} warnings</span></div><nav className="authoring-tabs" aria-label="制作ビュー"><button className={tab === "characters" ? "active" : ""} onClick={() => setTab("characters")}>キャラ設定</button><button className={tab === "flow" ? "active" : ""} onClick={() => setTab("flow")}>体験フロー</button><button className={tab === "script" ? "active" : ""} onClick={() => setTab("script")}>台本・Runtime</button></nav>{tab === "characters" ? renderCharacterView() : tab === "flow" ? renderFlowView() : renderScriptView()}{tab === "script" && selectedNode && <VoiceGenerationPanel projectId={projectIdFor(pack)} pack={pack} selectedNode={selectedNode} selectedCharacter={selectedNodeCharacter} onAssignPreset={updateNodeCharacterPreset} onApplyCandidate={applyGeneratedVoice} />}<section className="authoring-validation"><div><b>検証結果</b><span>クリック可能なエラーは該当ノードへ移動</span></div><div className="validation-list">{issues.length ? issues.slice(0, 8).map((item, index) => <button key={`${item.message}-${index}`} className={`validation-item ${item.level}`} onClick={() => item.nodeId && selectNode(item.nodeId)}><span>{item.level === "error" ? "×" : "△"}</span><span>{item.message}</span>{item.nodeId && <code>{item.nodeId}</code>}</button>) : <span className="validation-clean">構造検証に問題ありません</span>}{issues.length > 8 && <span className="validation-more">他 {issues.length - 8} 件</span>}</div></section><button className="raw-toggle" onClick={() => setShowRaw((value) => !value)}>{showRaw ? "Raw JSONを閉じる" : "Raw JSONを表示"}</button>{showRaw && <pre className="authoring-raw-json">{JSON.stringify(pack, null, 2)}</pre>}<div className="authoring-footer"><Link to="/library">← ライブラリへ</Link><span>同じ正本JSONを、構造ビューと台本・Runtimeビューで共有しています。</span></div></div>;
+  return <div className="page authoring-page"><PageHeader eyebrow="AUTHORING STUDIO" title="ステート台本パック制作"><div className="authoring-toolbar"><label className="button secondary">JSONを開く<input type="file" accept=".json,application/json" hidden onChange={importPack} /></label><button className="button secondary" onClick={openNewScriptDialog}>＋ 台本を新規作成</button><label className="authoring-file-name-field"><span>ファイル名</span><input aria-label="保存するファイル名" value={fileName} onChange={(event) => setFileName(event.target.value)} onBlur={() => { try { setFileName(normalizeScriptFileName(fileName)); } catch { /* 保存時にメッセージを表示 */ } }} /></label><button className="button secondary" onClick={saveAsFile}>名前を付けて保存</button><button className="button primary" onClick={save}>下書き保存{dirty ? "*" : ""}</button></div></PageHeader><div className="authoring-status"><span className={issues.some((item) => item.level === "error") ? "status-error" : "status-ok"}>●</span><b>{pack.meta.title}</b><span>{pack.meta.version}</span><span>{message}</span><span className="status-count">{issues.filter((item) => item.level === "error").length} errors · {issues.filter((item) => item.level === "warning").length} warnings</span></div><nav className="authoring-tabs" aria-label="制作ビュー"><button className={tab === "characters" ? "active" : ""} onClick={() => setTab("characters")}>キャラ設定</button><button className={tab === "flow" ? "active" : ""} onClick={() => setTab("flow")}>体験フロー</button><button className={tab === "script" ? "active" : ""} onClick={() => setTab("script")}>台本・Runtime</button></nav>{tab === "characters" ? renderCharacterView() : tab === "flow" ? renderFlowView() : renderScriptView()}{tab === "script" && selectedNode && <VoiceGenerationPanel projectId={projectIdFor(pack)} pack={pack} selectedNode={selectedNode} selectedCharacter={selectedNodeCharacter} onAssignPreset={updateNodeCharacterPreset} onApplyCandidate={applyGeneratedVoice} />}<section className="authoring-validation"><div><b>検証結果</b><span>クリック可能なエラーは該当ノードへ移動</span></div><div className="validation-list">{issues.length ? issues.slice(0, 8).map((item, index) => <button key={`${item.message}-${index}`} className={`validation-item ${item.level}`} onClick={() => item.nodeId && selectNode(item.nodeId)}><span>{item.level === "error" ? "×" : "△"}</span><span>{item.message}</span>{item.nodeId && <code>{item.nodeId}</code>}</button>) : <span className="validation-clean">構造検証に問題ありません</span>}{issues.length > 8 && <span className="validation-more">他 {issues.length - 8} 件</span>}</div></section><button className="raw-toggle" onClick={() => setShowRaw((value) => !value)}>{showRaw ? "Raw JSONを閉じる" : "Raw JSONを表示"}</button>{showRaw && <pre className="authoring-raw-json">{JSON.stringify(pack, null, 2)}</pre>}<div className="authoring-footer"><Link to="/library">← ライブラリへ</Link><span>同じ正本JSONを、構造ビューと台本・Runtimeビューで共有しています。</span></div>{showNewScriptDialog && <div className="authoring-dialog-backdrop" role="presentation"><div className="authoring-dialog" role="dialog" aria-modal="true" aria-labelledby="new-script-dialog-title"><div className="authoring-detail-title"><div><p className="eyebrow">NEW SCRIPT</p><h2 id="new-script-dialog-title">台本を新規作成</h2></div><button type="button" className="dialog-close" aria-label="閉じる" onClick={() => setShowNewScriptDialog(false)}>×</button></div><p className="authoring-dialog-description">空の台本パックを作成します。作成後にノード・キャラクターを追加して、指定したファイル名で保存できます。</p><form onSubmit={createNewScript}><label>台本名<input autoFocus value={newScriptTitle} onChange={(event) => setNewScriptTitle(event.target.value)} /></label><label>保存ファイル名<input value={newScriptFileName} onChange={(event) => setNewScriptFileName(event.target.value)} /></label>{newScriptError && <p className="authoring-dialog-error" role="alert">{newScriptError}</p>}<div className="editor-actions bottom"><button type="button" className="button secondary" onClick={() => setShowNewScriptDialog(false)}>キャンセル</button><button type="submit" className="button primary">作成する</button></div></form></div></div>}</div>;
 }

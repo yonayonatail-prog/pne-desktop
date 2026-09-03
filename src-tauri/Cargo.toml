@@ -8,13 +8,22 @@ rust-version = "1.82"
 
 [lib]
 name = "pne_desktop_lib"
-crate-type = ["staticlib", "cdylib", "rlib"]
+# Windows desktop distribution only needs the Rust library consumed by the
+# companion binary; mobile/static library outputs are not part of this target.
+crate-type = ["rlib"]
+
+[profile.release]
+# The Windows release build includes the bundled TTS runtime and otherwise
+# exceeds the available memory during LLVM's parallel code generation.
+codegen-units = 1
+opt-level = 1
+debug = 0
 
 [build-dependencies]
 tauri-build = { version = "=2.6.3", features = [] }
 
 [dependencies]
-tauri = { version = "=2.11.5", features = [] }
+tauri = { version = "=2.11.5", features = ["protocol-asset"] }
 tauri-plugin-deep-link = "=2.4.9"
 tauri-plugin-opener = "=2.5.4"
 serde = { version = "=1.0.228", features = ["derive"] }
@@ -23,6 +32,7 @@ thiserror = "=2.0.16"
 url = "=2.5.7"
 rusqlite = { version = "=0.37.0", features = ["bundled"] }
 sha2 = "=0.10.9"
+crc32fast = "=1.5.1"
 hex = "=0.4.3"
 aes-gcm = "=0.10.3"
 base64 = "=0.22.1"

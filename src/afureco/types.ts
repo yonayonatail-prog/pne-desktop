@@ -2,6 +2,13 @@ export type LineStatus = "NOT_RECORDED" | "IN_PROGRESS" | "SUBMITTED" | "REVISIO
 export type TakeSyncStatus = "LOCAL_ONLY" | "UPLOADING" | "SYNCED" | "RETRY_REQUIRED";
 export type TakeReviewStatus = "DRAFT" | "SUBMITTED" | "REVISION_REQUESTED" | "APPROVED";
 
+/** A dynamic player-name insertion between two separately recorded voice parts. */
+export interface NameSlotBoundary {
+  slotId: string;
+  template: string;
+  form?: string;
+}
+
 export interface ScriptLine {
   lineId: string;
   nodeId: string;
@@ -13,6 +20,13 @@ export interface ScriptLine {
   reading?: string;
   direction?: string;
   expectedDurationMs?: number;
+  /** Original source line before it was split around a dynamic name. */
+  sourceLineId?: string;
+  /** Zero-based index and total count of the voice part within sourceLineId. */
+  segmentIndex?: number;
+  segmentCount?: number;
+  nameSlotsBefore?: NameSlotBoundary[];
+  nameSlotsAfter?: NameSlotBoundary[];
   status: LineStatus;
 }
 

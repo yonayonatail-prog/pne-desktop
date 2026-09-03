@@ -1,10 +1,79 @@
-import type { AfurecoProject, LineStatus, ScriptLine } from "../afureco/types";
+import type { AfurecoProject, LineStatus, NameSlotBoundary, ScriptLine } from "../afureco/types";
 
 type JsonRecord = Record<string, unknown>;
 
 const isRecord = (value: unknown): value is JsonRecord => value !== null && typeof value === "object" && !Array.isArray(value);
 const asText = (value: unknown): string => typeof value === "string" ? value.trim() : value == null ? "" : String(value).trim();
 const asPositiveNumber = (value: unknown): number | undefined => typeof value === "number" && Number.isFinite(value) && value > 0 ? value : undefined;
+const DEFAULT_NAME_SLOT_ID = "name.main";
+const DYNAMIC_NAME_TOKEN_PATTERN = /\{\{\s*(name|user)(?::\s*([^{}]+?))?\s*\}\}/gi;
+
+export interface DynamicNameTextPart {
+  text: string;
+  nameSlotsBefore?: NameSlotBoundary[];
+  nameSlotsAfter?: NameSlotBoundary[];
+}
+
+function nameSlotIdFromRow(row: JsonRecord): string {
+  const direct = asText(row.nameSlotId || row.name_slot_id);
+  if (direct) return direct;
+  const slots = Array.isArray(row.name_slots) ? row.name_slots : [];
+  const first = slots.find((slot) => typeof slot === "string" || isRecord(slot));
+  if (typeof first === "string") return asText(first) || DEFAULT_NAME_SLOT_ID;
+  if (isRecord(first)) return asText(first.slotId || first.slot_id || first.name_slot_id || first.id) || DEFAULT_NAME_SLOT_ID;
+  const displayPart = Array.isArray(row.display_sequence)
+    ? row.display_sequence.find((part) => isRecord(part) && (part.slotId || part.slot_id || part.name_slot_id))
+    : undefined;
+  if (isRecord(displayPart)) return asText(displayPart.slotId || displayPart.slot_id || displayPart.name_slot_id) || DEFAULT_NAME_SLOT_ID;
+  return DEFAULT_NAME_SLOT_ID;
+}
+
+function nameBoundary(match: RegExpExecArray, slotId: string): NameSlotBoundary {
+  const template = match[0];
+  const form = asText(match[2]) || undefined;
+  return { slotId, template, ...(form ? { form } : {}) };
+}
+
+function hasDynamicNameToken(text: string): boolean {
+  DYNAMIC_NAME_TOKEN_PATTERN.lastIndex = 0;
+  return DYNAMIC_NAME_TOKEN_PATTERN.test(String(text));
+}
+
+export function splitDynamicNameText(text: string, slotId = DEFAULT_NAME_SLOT_ID): DynamicNameTextPart[] {
+  const source = String(text);
+  const parts: DynamicNameTextPart[] = [];
+  const pendingBefore: NameSlotBoundary[] = [];
+  let cursor = 0;
+  let matched = false;
+  let match: RegExpExecArray | null;
+
+  DYNAMIC_NAME_TOKEN_PATTERN.lastIndex = 0;
+  while ((match = DYNAMIC_NAME_TOKEN_PATTERN.exec(source)) !== null) {
+    matched = true;
+    const fragment = source.slice(cursor, match.index).trim();
+    const boundary = nameBoundary(match, slotId);
+    if (fragment) {
+      const part: DynamicNameTextPart = { text: fragment };
+      if (pendingBefore.length) part.nameSlotsBefore = pendingBefore.splice(0, pendingBefore.length);
+      parts.push(part);
+    }
+    if (parts.length) {
+      const previous = parts[parts.length - 1];
+      previous.nameSlotsAfter = [...(previous.nameSlotsAfter || []), boundary];
+    }
+    pendingBefore.push(boundary);
+    cursor = match.index + match[0].length;
+  }
+
+  if (!matched) return [];
+  const finalFragment = source.slice(cursor).trim();
+  if (finalFragment) {
+    const part: DynamicNameTextPart = { text: finalFragment };
+    if (pendingBefore.length) part.nameSlotsBefore = pendingBefore;
+    parts.push(part);
+  }
+  return parts;
+}
 
 function parseJsonText(text: string, filename: string): unknown {
   const source = text.replace(/^\uFEFF/, "");
@@ -130,6 +199,13 @@ function estimatedDurationMs(text: string): number {
   return Math.max(700, Math.round((spokenCharacters / 4.5) * 1000 + 500));
 }
 
+function durationForSegment(totalDuration: number | undefined, text: string, parts: DynamicNameTextPart[]): number {
+  if (!totalDuration || parts.length <= 1) return totalDuration || estimatedDurationMs(text);
+  const totalCharacters = Math.max(1, parts.reduce((sum, part) => sum + part.text.replace(/\s/g, "").length, 0));
+  const segmentCharacters = Math.max(1, text.replace(/\s/g, "").length);
+  return Math.max(1, Math.round(totalDuration * segmentCharacters / totalCharacters));
+}
+
 function lineRows(source: JsonRecord): JsonRecord[] {
   const direct = [source.lines, source.nodes, isRecord(source.scenario) ? source.scenario.nodes : undefined, isRecord(source.script) ? source.script.nodes : undefined];
   for (const candidate of direct) {
@@ -203,18 +279,32 @@ export function normalizeAfurecoProject(value: unknown, filename = "script.json"
     const explicitDuration = asPositiveNumber(row.expectedDurationMs || row.expected_duration_ms || row.durationMs || row.duration_ms);
     const durationFromSeconds = asPositiveNumber(row.seconds) ? Number(row.seconds) * 1000 : undefined;
     const direction = performanceDirection(row.direction) || performanceDirection(row.performance);
-    lines.push({
-      lineId,
-      nodeId: rawNodeId,
-      sceneId,
-      sceneName,
-      characterId,
-      speakerName,
-      text,
-      direction,
-      expectedDurationMs: explicitDuration || durationFromSeconds || estimatedDurationMs(text),
-      status: readLineStatus(row.status)
-    });
+    const isSegmented = hasDynamicNameToken(text);
+    const dynamicParts = splitDynamicNameText(text, nameSlotIdFromRow(row));
+    const parts = isSegmented ? dynamicParts : [{ text }];
+    for (let segmentIndex = 0; segmentIndex < parts.length; segmentIndex += 1) {
+      const part = parts[segmentIndex];
+      const segmentLineId = isSegmented && parts.length > 1 ? `${lineId}-part-${String(segmentIndex + 1).padStart(2, "0")}` : lineId;
+      lines.push({
+        lineId: segmentLineId,
+        nodeId: rawNodeId,
+        sceneId,
+        sceneName,
+        characterId,
+        speakerName,
+        text: part.text,
+        direction,
+        expectedDurationMs: durationForSegment(explicitDuration || durationFromSeconds, part.text, parts),
+        ...(isSegmented ? {
+          sourceLineId: rawId,
+          segmentIndex,
+          segmentCount: parts.length,
+          ...(part.nameSlotsBefore ? { nameSlotsBefore: part.nameSlotsBefore } : {}),
+          ...(part.nameSlotsAfter ? { nameSlotsAfter: part.nameSlotsAfter } : {})
+        } : {}),
+        status: readLineStatus(row.status)
+      });
+    }
   }
 
   if (!lines.length) throw new Error(`${filename}: 本文のあるセリフが見つかりません。`);

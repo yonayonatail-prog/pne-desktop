@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { useParams } from "react-router-dom";
 import { platform } from "../lib/platform";
+import { getPreparedNameVoiceTransferClips } from "../lib/irodori-name-voice";
+import type { NameProfile } from "../types";
 import { BackLink } from "./shared";
 import { useWorks } from "./works-context";
 
@@ -18,7 +20,14 @@ export function TransferScreen() {
   }, [transfer]);
   useEffect(() => () => { if (transfer) platform.stopTransfer(transfer.taskId).catch(() => {}); }, [transfer]);
   if (!work) return <div className="page"><h1>作品が見つかりません</h1></div>;
-  const start = async () => { setState("PREPARING"); setError(""); try { const result = await platform.startTransfer(work.workId, work.version); setTransfer(result); setState("WAITING"); } catch (reason) { setError(reason instanceof Error ? reason.message : "転送を開始できません"); setState("ERROR"); } };
+  const start = async () => { setState("PREPARING"); setError(""); try {
+    const rawProfile = sessionStorage.getItem(`pne.profile.${work.workId}.${work.version}`);
+    if (!rawProfile) throw new Error("名前音声の準備情報がありません。名前画面から生成してください。");
+    const profile = JSON.parse(rawProfile) as NameProfile;
+    const clips = await getPreparedNameVoiceTransferClips(work, profile);
+    const result = await platform.startTransfer(work.workId, work.version, clips);
+    setTransfer(result); setState("WAITING");
+  } catch (reason) { setError(reason instanceof Error ? reason.message : "転送を開始できません"); setState("ERROR"); } };
   const stop = async () => { if (transfer) await platform.stopTransfer(transfer.taskId); setTransfer(null); setState("STOPPED"); };
   return <div className="page transfer-page"><BackLink to={`/works/${work.workId}/${work.version}`}>作品の準備に戻る</BackLink><p className="eyebrow">MOBILE TRANSFER</p><h1>スマホで最初から聴く</h1><p className="lead">名前音声だけを暗号化して同じ家庭内ネットワークへ一時転送します。PCのセーブや現在位置は含みません。</p>
     <section className="transfer-layout"><div className="transfer-main">

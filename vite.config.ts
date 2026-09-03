@@ -1,9 +1,26 @@
 import { defineConfig } from "vitest/config";
 import react from "@vitejs/plugin-react";
+import fs from "node:fs";
 import path from "node:path";
 
+const isTauriBuild = Boolean(process.env.TAURI_ENV_PLATFORM);
+
+function tauriLargeResourcePlugin() {
+  return {
+    name: "tauri-large-resource",
+    apply: "build" as const,
+    closeBundle() {
+      if (!isTauriBuild) return;
+      const embeddedModelPath = path.resolve(__dirname, "dist/vendor/irodori-tts-webgpu");
+      if (fs.existsSync(embeddedModelPath)) {
+        fs.rmSync(embeddedModelPath, { recursive: true, force: true });
+      }
+    }
+  };
+}
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [react(), tauriLargeResourcePlugin()],
   publicDir: "img",
   resolve: {
     alias: {

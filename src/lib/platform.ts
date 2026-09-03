@@ -1,13 +1,36 @@
 import { SAMPLE_WORKS } from "../data/sample";
 import type { DiagnosticsSnapshot, LocalWork, StoredSession } from "../types";
+import type { PreparedNameVoiceTransferClip } from "./irodori-name-voice";
 import { getIrodoriModelState } from "./irodori-name-voice";
 import type { AuthoringPack } from "../authoring/types";
 
 const isTauri = () => typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
+export interface AfurecoPendingTakeFile {
+  takeId: string;
+  blob: Blob;
+}
+
+export interface AfurecoPendingFilesResult {
+  directory: string;
+  fileCount: number;
+  native: boolean;
+}
+
 async function invokeTauri<T>(command: string, args?: Record<string, unknown>): Promise<T> {
   const { invoke } = await import("@tauri-apps/api/core");
   return invoke<T>(command, args);
+}
+
+function downloadAfurecoFile(file: AfurecoPendingTakeFile): void {
+  const url = URL.createObjectURL(file.blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = `take-${file.takeId}.wav`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
 export const platform = {
@@ -54,8 +77,9 @@ export const platform = {
       modelState, releaseConfiguration: "DEVELOPMENT"
     };
   },
-  async startTransfer(workId: string, version: string): Promise<{ url: string; expiresAt: string; taskId: string }> {
-    if (isTauri()) return invokeTauri("transfer_start_dev", { workId, workVersion: version });
+  async startTransfer(workId: string, version: string, clips: PreparedNameVoiceTransferClip[]): Promise<{ url: string; expiresAt: string; taskId: string }> {
+    const playerOrigin = import.meta.env.VITE_PLAYER_ORIGIN || "https://pne-mobile-player.yonayona-tail.chatgpt.site";
+    if (isTauri()) return invokeTauri("transfer_start_dev", { workId, workVersion: version, clips, playerOrigin });
     const payload = encodeURIComponent(JSON.stringify({ work_id: workId, work_version: version, mode: "development-preview" }));
     return { url: `${location.origin}/mobile-import#preview=${payload}`, expiresAt: new Date(Date.now() + 10 * 60_000).toISOString(), taskId: crypto.randomUUID() };
   },
@@ -65,6 +89,18 @@ export const platform = {
   async openPortal(): Promise<void> {
     if (isTauri()) { await invokeTauri("portal_open", { target: "HOME" }); return; }
     window.open(import.meta.env.VITE_PORTAL_ORIGIN || "https://pne.example.invalid", "_blank", "noopener,noreferrer");
+  },
+  async revealAfurecoPendingFiles(projectId: string, files: AfurecoPendingTakeFile[]): Promise<AfurecoPendingFilesResult> {
+    if (!files.length) throw new Error("提出待ちの録音ファイルがありません。");
+    if (isTauri()) {
+      const takes = await Promise.all(files.map(async (file) => ({
+        takeId: file.takeId,
+        audioBytes: Array.from(new Uint8Array(await file.blob.arrayBuffer()))
+      })));
+      return invokeTauri<AfurecoPendingFilesResult>("afureco_export_pending_takes", { projectId, takes });
+    }
+    files.forEach(downloadAfurecoFile);
+    return { directory: "ブラウザのダウンロードフォルダ", fileCount: files.length, native: false };
   },
   async authoringSave(projectId: string, pack: AuthoringPack): Promise<void> {
     if (isTauri()) {

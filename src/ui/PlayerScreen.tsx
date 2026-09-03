@@ -3,7 +3,7 @@ import { Link, useParams, useSearchParams } from "react-router-dom";
 import { PlayerEngine, type ReactionInput, type ResolvedHistoryEntry, type RuntimeSnapshot, type Scenario } from "@pne/player-core";
 import { callDisplay } from "../lib/name";
 import { playPreparedNameVoice } from "../lib/irodori-name-voice";
-import { playAudioSource, stopAudioPlayback } from "../lib/audio-playback";
+import { playAudioSource, stopAudioPlayback, unlockAudioPlayback } from "../lib/audio-playback";
 import { loadVoiceAudio } from "../authoring/voice-generation/generation-store";
 import { platform } from "../lib/platform";
 import type { NameProfile, StoredSession } from "../types";
@@ -62,6 +62,7 @@ export function PlayerScreen() {
     let cancelled = false;
     const delay = (milliseconds: number) => new Promise<void>((resolve) => window.setTimeout(resolve, milliseconds));
     const playClip = async (source: string | Blob) => { if (!cancelled) await playAudioSource(source); };
+    const resolveClip = (clipId: string): string | null => work.assetUrls?.[clipId] ?? (clipId.startsWith("/") ? clipId : null);
     const playSequence = async () => {
       if (muted) {
         await delay(Math.max(900, entry.audioSequence.length * 500));
@@ -74,7 +75,8 @@ export function PlayerScreen() {
             const played = await playPreparedNameVoice(work, profile, slotId).catch(() => false);
             if (!played && !cancelled) {
               const fallback = work.nameSlots.find((slot) => slot.slot_id === slotId)?.fallback_clip_id;
-              if (fallback?.startsWith("/")) await playClip(fallback);
+              const fallbackSource = fallback ? resolveClip(fallback) : null;
+              if (fallbackSource) await playClip(fallbackSource);
             }
           }
           else if ("clip_id" in part && part.clip_id.startsWith("pne-generated:")) {
@@ -82,7 +84,11 @@ export function PlayerScreen() {
             if (!clip) throw new Error("採用済みの生成音声が見つかりません。台本プロジェクトと音声データが同じ端末にあるか確認してください。");
             await playClip(clip);
           }
-          else if ("clip_id" in part && part.clip_id.startsWith("/")) await playClip(part.clip_id);
+          else if ("clip_id" in part) {
+            const source = resolveClip(part.clip_id);
+            if (!source) throw new Error(`パッケージ内の音声が見つかりません: ${part.clip_id}`);
+            await playClip(source);
+          }
         }
       }
       if (!cancelled) { setAudioError(""); completeAudio(); }
@@ -154,9 +160,9 @@ export function PlayerScreen() {
     <div className="player-backdrop" style={{ backgroundImage: `url(${work.cover})` }} />
     <header className="player-top"><Link to={`/works/${work.workId}/${work.version}`} onClick={() => engine.pause()}>← 終了</Link><div><b>{work.title}</b><span>{snapshot.mode === "HISTORY" ? "履歴を再生中" : snapshot.status === "PAUSED" ? "一時停止" : "再生中"}</span></div><div className="player-top-actions"><button className="backlog-button" onClick={() => setBacklogOpen(true)} aria-expanded={backlogOpen} aria-controls="player-backlog">☰ <span>バックログ</span></button><button onClick={() => setMuted((value) => !value)} aria-label={muted ? "ミュート解除" : "ミュート"}>{muted ? "🔇" : "♬"}</button></div></header>
     <main className="player-stage" aria-live="polite">
-      {audioError && <section className="audio-error" role="alert"><b>音声を再生できません</b><p>{audioError}</p><button className="button primary" onClick={() => { setAudioError(""); setAudioRetry((value) => value + 1); }}>音声を再試行</button></section>}
-      {snapshot.status === "ENDED" ? <section className="end-panel"><p className="eyebrow">THE END</p><h1>{entry?.displayText}</h1><div><Link className="button primary" to={`/play/${work.workId}/${work.version}${fallback ? "?fallback=1" : ""}`} onClick={() => platform.deleteSession(work.workId, work.version)}>もう一度最初から</Link><Link className="button secondary" to={`/works/${work.workId}/${work.version}/transfer`}>スマホで最初から聴く</Link><Link className="text-link" to="/library">ライブラリへ</Link></div></section> : <>
-        <div className="speaker">{entry?.speaker || "　"}</div><p className="dialogue">{entry?.displayText}</p>
+      {audioError && <section className="audio-error" role="alert"><b>音声を再生できません</b><p>{audioError}</p><button className="button primary" onClick={async () => { setAudioError(""); try { await unlockAudioPlayback(); } catch { /* the actual retry reports the useful playback error */ } setAudioRetry((value) => value + 1); }}>音声を再試行</button></section>}
+      {snapshot.status === "ENDED" ? <section className="end-panel"><p className="eyebrow">THE END</p><h1>{entry?.displayText}</h1><div><Link className="button primary" to={`/play/${work.workId}/${work.version}${fallback ? "?fallback=1" : ""}`} onClick={() => platform.deleteSession(work.workId, work.version)}>もう一度最初から</Link>{work.capabilities.mobile_transfer_supported && <Link className="button secondary" to={`/works/${work.workId}/${work.version}/transfer`}>スマホで最初から聴く</Link>}<Link className="text-link" to="/library">ライブラリへ</Link></div></section> : <>
+        <div className="speaker">{entry?.speaker || "　"}</div>{entry?.displayImages && entry.displayImages.length > 0 && <div className="player-images" aria-label="場面画像">{entry.displayImages.map((image, index) => { const source = work.assetUrls?.[image.image_asset_id]; return source ? <img key={`${image.image_asset_id}-${index}`} src={source} alt={image.alt || "場面画像"} /> : null; })}</div>}<p className="dialogue">{entry?.displayText}</p>
         {lastClickDetection && <div className="reaction-detection-flash" role="status">✓ 歯カチを検知</div>}
         {snapshot.status === "WAITING_REACTION" && <section className="reaction-panel"><div className="reaction-label"><i /> {snapshot.pendingReactionConfirmation ? "もう一度確認" : publicSpaceMode ? "ボタンで操作" : "REACTION受付中"} <b>{reactionSeconds}</b></div><p>{snapshot.pendingReactionConfirmation ? "同じ反応をもう一度入力してください" : publicSpaceMode ? "声を使わず、ボタンで反応してください" : "端末内判定またはボタンで、短く反応してください"}</p>{reactionClickInputActive && <ReactionClickMonitor monitor={reactionClickMonitor} />}<div>{publicSpaceMode ? <><button onClick={() => react("CLICK_SINGLE")}><kbd>1</kbd><span>歯カチ</span></button><button onClick={() => react("SILENT")}><kbd>2</kbd><span>反応しない</span></button><button onClick={() => react("NEXT")}><kbd>3</kbd><span>次へ</span></button></> : <><button onClick={() => react("VOICE_YES")}><kbd>1</kbd><span>はい・うん</span></button><button onClick={() => react("VOICE_NO")}><kbd>2</kbd><span>いいえ・やだ</span></button><button onClick={() => react("CLICK_SINGLE")}><kbd>3</kbd><span>歯カチ</span></button><button onClick={() => react("SILENT")}><kbd>4</kbd><span>反応しない</span></button><button onClick={() => react("NEXT")}><kbd>5</kbd><span>次へ</span></button></>}</div></section>}
         {snapshot.status === "WAITING_NEXT" && <button className="next-button" onClick={() => sync(engine.next())}>次へ <span>→</span></button>}

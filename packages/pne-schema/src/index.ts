@@ -4,13 +4,23 @@ export const SUPPORTED_FEATURES = new Set(["reaction.v1", "history.v1", "name_vo
 const ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
 const SEMVER = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-const ACCEPTED_MIME = new Set(["audio/wav", "audio/mpeg", "image/png", "image/jpeg", "image/webp"]);
+const ACCEPTED_MIME = new Set(["audio/wav", "audio/mpeg", "audio/ogg", "audio/webm", "image/png", "image/jpeg", "image/webp"]);
 
 export interface PneAsset {
   asset_id: string; path: string; kind: "voice" | "bgm" | "se" | "voice_reference" | "image";
   mime: string; bytes: number; sha256: string; duration_ms?: number;
 }
 export interface AssetsFile { schema_version: "1.0"; assets: PneAsset[] }
+
+export interface PneLicense {
+  license_id: string;
+  allow_audio_addition: boolean;
+  allow_external_distribution: boolean;
+  allow_external_sale: boolean;
+  credit_required: boolean;
+  attribution?: string;
+  source_url?: string;
+}
 
 export interface PneVoiceProfile {
   voice_id: string;
@@ -26,6 +36,7 @@ export interface PneManifest {
   runtime_state_schema: { version: string; variables: Record<string, unknown> };
   scenario_path: "scenario.json"; assets_path: "assets.json"; required_features: string[];
   capabilities: { web_playable: boolean; desktop_playable: boolean; name_call_supported: boolean; mobile_transfer_supported: boolean };
+  license?: PneLicense;
   name_voice?: { preview_slot_id?: string; required_models: Array<{ model_id: string; model_version: string }>; voice_profiles: PneVoiceProfile[]; slots: NameSlot[] };
 }
 
@@ -76,6 +87,14 @@ export function validatePackageContract(manifest: PneManifest, assetsFile: Asset
   }
   if (declaredBytes > 2 * 1024 * 1024 * 1024) problems.push("declared asset total exceeds 2 GiB");
   try { validateScenario(scenario, slots); } catch (error) { problems.push(...(error as { problems?: string[] }).problems ?? [String(error)]); }
+  for (const node of scenario.nodes) {
+    for (const part of node.audio?.sequence ?? []) {
+      if ("clip_id" in part && !assetIds.has(part.clip_id)) problems.push(`${node.id}: audio asset does not resolve: ${part.clip_id}`);
+    }
+    for (const part of node.display_sequence ?? []) {
+      if ("image_asset_id" in part && !assetIds.has(part.image_asset_id)) problems.push(`${node.id}: image asset does not resolve: ${part.image_asset_id}`);
+    }
+  }
   for (const slot of slots) if (!assetIds.has(slot.fallback_clip_id)) problems.push(`${slot.slot_id}: fallback asset does not resolve`);
   if (problems.length) throw new PneValidationError(problems);
 }

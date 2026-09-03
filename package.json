@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "tauri": "tauri",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build"
+    "tauri:build": "tauri build",
+    "pne": "vite-node tools/pne-cli.ts"
   },
   "dependencies": {
     "@tauri-apps/api": "2.11.1",

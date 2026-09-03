@@ -214,12 +214,20 @@ export function noteMicrophoneReleased(): void {
   lastMicrophoneReleaseAt = Date.now();
 }
 
-export async function releaseMicrophoneForPlayback(): Promise<void> {
-  if (microphoneReleases.size > 0) {
-    await Promise.allSettled([...microphoneReleases].map((release) => release()));
-  }
-  // Windows/WebView2 and Bluetooth headsets may need a moment to restore the
-  // normal playback endpoint after an input stream is closed.
-  const remaining = 180 - (Date.now() - lastMicrophoneReleaseAt);
-  if (remaining > 0) await new Promise<void>((resolve) => globalThis.setTimeout(resolve, remaining));
+export function releaseMicrophoneForPlayback(): void | Promise<void> {
+  const releases = [...microphoneReleases];
+  const waitForPlaybackEndpoint = (): void | Promise<void> => {
+    // Windows/WebView2 and Bluetooth headsets may need a moment to restore the
+    // normal playback endpoint after an input stream is closed.
+    const remaining = 180 - (Date.now() - lastMicrophoneReleaseAt);
+    if (remaining <= 0) return;
+    return new Promise<void>((resolve) => globalThis.setTimeout(resolve, remaining));
+  };
+
+  // Keep the no-microphone path synchronous. The caller may be inside a click
+  // gesture, and an unnecessary await can make WebView2 reject audio.play().
+  if (releases.length === 0) return waitForPlaybackEndpoint();
+  return Promise.allSettled(releases.map((release) => release()))
+    .then(waitForPlaybackEndpoint)
+    .then(() => undefined);
 }

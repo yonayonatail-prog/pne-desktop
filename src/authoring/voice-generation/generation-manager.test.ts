@@ -47,4 +47,19 @@ describe("dialogue generation manager", () => {
     expect(new Set(calls.map((call) => call.seed))).toEqual(new Set([1234]));
     expect(round.reference_fingerprint).toBe("ref-test");
   });
+
+  it.each([
+    ["non-finite", new Float32Array([Number.NaN, 0.2])],
+    ["silent", new Float32Array(1_000)]
+  ])("rejects %s model output instead of storing a ready silent candidate", async (_label, audio) => {
+    const generator = new DialogueVoiceGenerator({
+      synthesizeContext: async () => ({ audio, sampleRate: 1_000 })
+    });
+
+    const round = await generator.generateRound({ nodes, nodeId: "N2", preset, referenceUrl: "blob:test", seedBase: 1234 });
+
+    expect(round.status).toBe("failed");
+    expect(round.candidates.every((candidate) => candidate.status === "failed")).toBe(true);
+    expect(round.candidates.every((candidate) => candidate.error_code === "INVALID_GENERATED_AUDIO")).toBe(true);
+  });
 });

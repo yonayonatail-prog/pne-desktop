@@ -168,11 +168,17 @@ export class PlayerEngine {
   }
 
   private makeEntry(node: ScenarioNode): ResolvedHistoryEntry {
-    const displayText = (node.display_sequence ?? []).map((part) => "text" in part ? part.text : this.resolvers.displayName(part.name_slot_id)).join("");
+    const displayText = (node.display_sequence ?? []).map((part) => {
+      if ("text" in part) return part.text;
+      if ("name_slot_id" in part) return this.resolvers.displayName(part.name_slot_id);
+      return "";
+    }).join("");
+    const displayImages = (node.display_sequence ?? []).filter((part): part is Extract<typeof part, { image_asset_id: string }> => "image_asset_id" in part);
     const audioSequence = (node.audio?.sequence ?? []).flatMap<AudioPart>((part) => "name_slot_id" in part ? this.resolvers.resolveNameAudio(part.name_slot_id) : [part]);
     return {
       index: this.snapshot.history.length, nodeId: node.id, speaker: node.speaker, timelineMs: node.timeline_ms,
-      displayText, audioSequence, committedAt: new Date().toISOString()
+      displayText, displayImages: displayImages.length ? displayImages : undefined,
+      audioSequence, committedAt: new Date().toISOString()
     };
   }
 

@@ -32,7 +32,8 @@ export type Variables = Record<string, Scalar>;
 
 export interface TextPart { text: string }
 export interface NamePart { name_slot_id: string }
-export type DisplayPart = TextPart | NamePart;
+export interface ImagePart { image_asset_id: string; alt?: string }
+export type DisplayPart = TextPart | NamePart | ImagePart;
 
 export interface ClipPart { clip_id: string }
 export interface NameClipPart { name_slot_id: string }
@@ -125,6 +126,7 @@ export interface ResolvedHistoryEntry {
   speaker?: string;
   timelineMs: number;
   displayText: string;
+  displayImages?: ImagePart[];
   audioSequence: AudioPart[];
   reactionInput?: ReactionInput;
   rawReactionInput?: ReactionInput;
